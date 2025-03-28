@@ -1,19 +1,19 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: hello-argo
+  name: operator
   namespace: argocd
 spec:
   project: default
   source:
     repoURL: https://github.com/bryancymo/cymo-hogent-2025-operator.git
     targetRevision: HEAD
-    path: .
+    path: operator
   destination:
     server: https://kubernetes.default.svc
-    namespace: default
+    namespace: operator # or another namespace if needed
   syncPolicy:
     automated:
-      prune: true
       selfHeal: true
+      prune: true
 

@@ -1,0 +1,31 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: redpanda
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://charts.redpanda.com
+    chart: redpanda
+    targetRevision: 5.9.21
+    helm:
+      parameters:
+        - name: auth.sasl.enabled
+          value: "true"
+        - name: auth.sasl.users[0].name
+          value: "superuser"
+        - name: auth.sasl.users[0].password
+          value: "secretpassword"
+        - name: external.domain
+          value: "customredpandadomain.local"
+#        - name: storage.persistentVolume.storageClass
+#          value: "csi-driver-lvm-striped-xfs"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: redpanda  # Change this if you want a different namespace
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+
