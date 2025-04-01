@@ -9,3 +9,13 @@ spec:
   developerGroups:
     - dev-group1
     - dev-group2
+---
+apiVersion: jones.com/v1
+kind: Service
+metadata:
+  name: test-service
+  namespace: default
+spec:
+  name: test-service
+  contextLink: test-context
+  secretSolution: test-secret
