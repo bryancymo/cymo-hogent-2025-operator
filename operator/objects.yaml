@@ -1,0 +1,11 @@
+apiVersion: jones.com/v1
+kind: Context
+metadata:
+  name: test-context
+  namespace: default
+spec:
+  name: test-context
+  owner: your-owner
+  developerGroups:
+    - dev-group1
+    - dev-group2
