@@ -137,3 +137,54 @@ spec:
                     type: string
                 partitions:
                   type: integer
+---
+
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: applicationTopic.jones.com
+  annotations:
+    description: "crd voor applicatie topics in Kubernetes"
+spec:
+  group: jones.com
+  names:
+    kind: ApplicationTopic
+    plural: applicationtopics
+    singular: applicationtopic
+    shortNames:
+      - apt
+  scope: Namespaced
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              type: object
+              properties:
+                name:
+                  type: string
+                config:
+                  type: object
+                  properties:
+                    retentionMs:
+                      type: integer
+                    replicationFactor:
+                      type: integer
+                    cleanupPolicy:
+                      type: string
+                consumers:
+                  type: array
+                  items:
+                    type: string
+                partitions:
+                  type: integer
