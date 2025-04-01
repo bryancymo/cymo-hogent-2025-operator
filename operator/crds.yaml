@@ -66,14 +66,19 @@ spec:
       schema:
         openAPIV3Schema:
           type: object
+          required: ["spec"]  # ✅ Ensures `spec` is always present
           properties:
             apiVersion:
               type: string
             kind:
               type: string
-            metadata:
+            metadata:  # ✅ FIX: Only allow `name` and `generateName`
               type: object
-              x-kubernetes-preserve-unknown-fields: true
+              properties:
+                name:
+                  type: string
+                generateName:
+                  type: string
             spec:
               type: object
               required:
@@ -89,6 +94,7 @@ spec:
                 secretSolution:
                   type: string
                   description: "Naam secret"
+
 --- 
 
 apiVersion: apiextensions.k8s.io/v1
