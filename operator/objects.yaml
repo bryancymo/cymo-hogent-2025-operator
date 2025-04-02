@@ -11,11 +11,11 @@ spec:
     - dev-group2
 ---
 apiVersion: jones.com/v1
-kind: Cservice
+kind: Servicealt
 metadata:
-  name: test-cservice
+  name: test-servicealt
   namespace: operator
 spec:
-  name: test-cservice
+  name: test-servicealt
   contextLink: test-context
   secretSolution: test-secret
