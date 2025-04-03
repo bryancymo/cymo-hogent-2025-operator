@@ -20,10 +20,17 @@ def create_kafka_topic(topic_name, partitions, replication_factor, retention_ms,
         config=topic_config
     )
 
-    admin_client.create_topics([new_topic])
+    futures = admin_client.create_topics([new_topic])
+
+    for topic, future in futures.items():
+        try:
+            future.result()  # Ensures the operation completes
+            print(f"Topic {topic} created successfully.")
+        except Exception as e:
+            print(f"Failed to create topic {topic}: {e}")
 
 @kopf.on.create("applicationtopics.jones.com", "v1", "applicationtopics")
-def create_topic(spec, **kwargs):
+def create_topic(spec, meta, **kwargs):
     topic_name = spec.get("name")
     partitions = spec.get("partitions", 1)
     retention_ms = spec.get("config", {}).get("retentionMs", 604800000)  # Default: 7 days
@@ -32,4 +39,5 @@ def create_topic(spec, **kwargs):
 
     create_kafka_topic(topic_name, partitions, replication_factor, retention_ms, cleanup_policy)
 
-    kopf.info(None, reason="Created", message=f"Kafka topic {topic_name} created successfully.")
+    kopf.adopt(meta)  # Ensures proper resource tracking
+    kopf.info(meta, reason="Created", message=f"Kafka topic {topic_name} created successfully.")
