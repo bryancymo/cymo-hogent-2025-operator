@@ -1,0 +1,22 @@
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: operator
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: operator
+  template:
+    metadata:
+      labels:
+        app: operator
+    spec:
+      containers:
+        - name: operator
+          image: gcr.io/your-project-id/operator:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
