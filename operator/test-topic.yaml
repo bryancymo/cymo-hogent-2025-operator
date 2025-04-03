@@ -1,0 +1,11 @@
+apiVersion: jones.com/v1
+kind: ApplicationTopic
+metadata:
+  name: test-topic
+spec:
+  name: test-topic
+  partitions: 3
+  config:
+    retentionMs: 86400000
+    replicationFactor: 2
+    cleanupPolicy: "compact"
