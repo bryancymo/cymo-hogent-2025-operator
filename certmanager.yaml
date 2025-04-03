@@ -13,6 +13,30 @@ spec:
       parameters:
         - name: crds.enabled
           value: "true"
+        - name: global.resources.requests.cpu
+          value: "5m"
+        - name: global.resources.requests.memory
+          value: "15Mi"
+        - name: global.resources.limits.cpu
+          value: "20m"
+        - name: global.resources.limits.memory
+          value: "50Mi"
+        - name: cainjector.resources.requests.cpu
+          value: "5m"
+        - name: cainjector.resources.requests.memory
+          value: "30Mi"
+        - name: cainjector.resources.limits.cpu
+          value: "20m"
+        - name: cainjector.resources.limits.memory
+          value: "50Mi"
+        - name: webhook.resources.requests.cpu
+          value: "5m"
+        - name: webhook.resources.requests.memory
+          value: "15Mi"
+        - name: webhook.resources.limits.cpu
+          value: "15m"
+        - name: webhook.resources.limits.memory
+          value: "30Mi"
   destination:
     server: https://kubernetes.default.svc
     namespace: cert-manager
@@ -20,4 +44,3 @@ spec:
     automated:
       selfHeal: true
       prune: true
-
