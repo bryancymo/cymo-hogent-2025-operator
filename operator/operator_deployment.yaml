@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kopf-operator
+  labels:
+    app: kopf-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kopf-operator
+  template:
+    metadata:
+      labels:
+        app: kopf-operator
+    spec:
+      serviceAccountName: kopf-operator-sa
+      containers:
+        - name: kopf-operator
+          image: eu.gcr.io/cymo-hogent-2025-operator/kopf-operator:latest
+          imagePullPolicy: Always
