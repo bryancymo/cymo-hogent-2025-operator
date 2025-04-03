@@ -14,29 +14,33 @@ spec:
         - name: crds.enabled
           value: "true"
         - name: global.resources.requests.cpu
-          value: "5m"
+          value: "10m"  
         - name: global.resources.requests.memory
-          value: "15Mi"
+          value: "20Mi"  
         - name: global.resources.limits.cpu
-          value: "20m"
+          value: "50m"  
         - name: global.resources.limits.memory
-          value: "50Mi"
+          value: "100Mi"  
         - name: cainjector.resources.requests.cpu
           value: "5m"
         - name: cainjector.resources.requests.memory
-          value: "30Mi"
+          value: "20Mi"
         - name: cainjector.resources.limits.cpu
-          value: "20m"
+          value: "10m"
         - name: cainjector.resources.limits.memory
           value: "50Mi"
         - name: webhook.resources.requests.cpu
           value: "5m"
         - name: webhook.resources.requests.memory
-          value: "15Mi"
+          value: "20Mi"
         - name: webhook.resources.limits.cpu
-          value: "15m"
+          value: "10m"
         - name: webhook.resources.limits.memory
-          value: "30Mi"
+          value: "50Mi"
+        - name: startupapicheck.resources.requests.cpu
+          value: "5m"
+        - name: startupapicheck.resources.requests.memory
+          value: "20Mi"
   destination:
     server: https://kubernetes.default.svc
     namespace: cert-manager
