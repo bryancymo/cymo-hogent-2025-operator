@@ -3,7 +3,7 @@ import kubernetes
 from confluent_kafka.admin import AdminClient, NewTopic
 
 # Kafka Configuration
-KAFKA_BOOTSTRAP_SERVERS = "bootstrap"
+KAFKA_BOOTSTRAP_SERVERS = "pkc-z1o60.europe-west1.gcp.confluent.cloud:9092"
 
 def create_kafka_topic(topic_name, partitions, replication_factor, retention_ms, cleanup_policy):
     admin_client = AdminClient({"bootstrap.servers": KAFKA_BOOTSTRAP_SERVERS})
