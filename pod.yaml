@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: operator
-          image: gcr.io/your-project-id/operator:latest
+          image: eu.gcr.io/cymo-hogent-2025-operator/kopf-operator:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
