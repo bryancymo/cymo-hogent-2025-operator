@@ -15,4 +15,4 @@ COPY operator2.py .
 COPY operatorRO.py .
 
 # Default entrypoint: use an environment variable to decide which operator to run
-CMD ["sh", "-c", "kopf run /app/${OPERATOR_SCRIPT:-operator2.py} --standalone --verbose"]
+CMD ["sh", "-c", "kopf run /app/${OPERATOR_SCRIPT:-operatorRO.py} --standalone --verbose"]
