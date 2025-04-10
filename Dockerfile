@@ -8,4 +8,3 @@ RUN pip install -r requirements.txt
 COPY operator2.py .
 
 CMD ["kopf", "run", "/app/operator2.py", "--standalone", "--verbose"]
-CMD ["kopf", "run", "/app/operatorRO.py", "--standalone", "--verbose"]
