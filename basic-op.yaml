@@ -59,6 +59,6 @@ spec:
     spec:
       serviceAccountName: kafka-operator-sa # Use the specified service account
       containers:
-      - name: operator
+      - name: operator2
         image: eu.gcr.io/cymo-hogent-2025-operator/kopf-operator:latest
         imagePullPolicy: Always
