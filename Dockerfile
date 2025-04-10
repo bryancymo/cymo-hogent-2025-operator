@@ -5,6 +5,6 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
-COPY operator.py .
+COPY operatorJB.py .
 
-CMD ["kopf", "run", "/app/operator.py", "--verbose"]
+CMD ["kopf", "run", "/app/operatorJB.py", "--standalone", "--verbose"]
