@@ -29,7 +29,7 @@ def create_kafka_topic(topic_name, partitions, replication_factor, retention_ms,
         except Exception as e:
             print(f"Failed to create topic {topic}: {e}")
 
-@kopf.on.create("applicationtopics.jones.com", "v1", "applicationtopics")
+@kopf.on.create("jones.com", "v1", "applicationtopics")
 def create_topic(spec, meta, **kwargs):
     topic_name = spec.get("name")
     partitions = spec.get("partitions", 1)
