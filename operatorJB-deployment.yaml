@@ -29,3 +29,28 @@ spec:
             limits:
               cpu: 500m
               memory: 256Mi
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: argocd
+  name: kafka-topic-operator-role
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services"]
+    verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kafka-topic-operator-rolebinding
+  namespace: argocd
+subjects:
+  - kind: ServiceAccount
+    name: kafka-topic-operator-sa
+    namespace: argocd
+roleRef:
+  kind: Role
+  name: kafka-topic-operator-role
+  apiGroup: rbac.authorization.k8s.io
