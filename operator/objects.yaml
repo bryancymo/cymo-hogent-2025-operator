@@ -19,3 +19,19 @@ spec:
   name: test-servicealt
   contextLink: test-context
   secretSolution: test-secret
+---
+apiVersion: jones.com/v1
+kind: ApplicationTopic
+metadata:
+  name: test-topic
+  namespace: argocd
+spec:
+  name: my-app-topic
+  partitions: 3
+  config:
+    retentionMs: 3600000
+    replicationFactor: 2
+    cleanupPolicy: delete
+  consumers:
+    - service1
+    - service2
