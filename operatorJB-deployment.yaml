@@ -15,13 +15,13 @@ spec:
       labels:
         app: kafka-topic-operator
     spec:
-      serviceAccountName: kafka-topic-operator-sa
+      serviceAccountName: kopf-operator-sa # <-- changed here
       containers:
         - name: operator
           image: eu.gcr.io/cymo-hogent-2025-operator/kopf-operator:latest
           env:
             - name: CONFLUENT_BOOTSTRAP_SERVERS
-              value: "pkc-z1o60.europe-west1.gcp.confluent.cloud:9092"
+              value: "localhost:9092"
           resources:
             requests:
               cpu: 100m
@@ -29,34 +29,37 @@ spec:
             limits:
               cpu: 500m
               memory: 256Mi
+
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: kafka-topic-operator-sa
+  name: kopf-operator-sa # <-- changed here
   namespace: argocd
+
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
+  name: kopf-operator-role # <-- renamed to match
   namespace: argocd
-  name: kafka-topic-operator-role
 rules:
   - apiGroups: [""]
     resources: ["pods", "services"]
     verbs: ["get", "list", "watch"]
+
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: kafka-topic-operator-rolebinding
+  name: kopf-operator-rolebinding # <-- renamed to match
   namespace: argocd
 subjects:
   - kind: ServiceAccount
-    name: kafka-topic-operator-sa
+    name: kopf-operator-sa # <-- changed here
     namespace: argocd
 roleRef:
   kind: Role
-  name: kafka-topic-operator-role
+  name: kopf-operator-role # <-- changed here
   apiGroup: rbac.authorization.k8s.io
 
