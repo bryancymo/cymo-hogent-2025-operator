@@ -8,7 +8,7 @@ from confluent_kafka.admin import AdminClient, NewTopic, KafkaException
 # --- Configuration ---
 # Fetch Confluent Cloud bootstrap servers from environment variable
 # You MUST set this in your deployment manifest.
-BOOTSTRAP_SERVERS = 'pkc-z1o60.europe-west1.gcp.confluent.cloud:9092'
+BOOTSTRAP_SERVERS = 'http://pkc-z1o60.europe-west1.gcp.confluent.cloud:9092/'
 # Name of the secret containing Confluent Cloud credentials
 SECRET_NAME = 'confluent-credentials'
 
