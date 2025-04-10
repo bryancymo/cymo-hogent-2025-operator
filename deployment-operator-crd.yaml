@@ -19,10 +19,13 @@ spec:
         - name: operator
           image: eu.gcr.io/cymo-hogent-2025-operator/kopf-operator:latest
           args:
+            - "python"
+            - "-m"
             - "kopf"
             - "run"
             - "--verbose"
             - "/app/operator-crd.py"
+
 ---
 apiVersion: v1
 kind: ServiceAccount
