@@ -87,7 +87,7 @@ def create_topic_handler(spec: kopf.Spec, meta: kopf.Meta, namespace: str, logge
     """
     topic_name = spec.get('name')
     partitions = spec.get('partitions', 1) # Default partitions if not specified
-    replication_factor = spec.get('replicationFactor', 3) # Default replication factor for Confluent Cloud
+    replication_factor = spec.get('replicationFactor', 1) # Default replication factor for Confluent Cloud
     config_spec = spec.get('config', {}) # Get topic config section
     retention_ms = config_spec.get('retentionMs')
     cleanup_policy = config_spec.get('cleanupPolicy')
