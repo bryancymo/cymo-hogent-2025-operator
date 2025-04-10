@@ -1,63 +1,62 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-operator-sa
+  namespace: argocd
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-operator-clusterrole
+rules:
+  - apiGroups: ["jones.com"]
+    resources:
+      - applicationtopics  # Only the ApplicationTopic resource is relevant for you
+    verbs: ["get", "list", "watch"]
+
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-operator-clusterrolebinding
+subjects:
+  - kind: ServiceAccount
+    name: my-operator-sa
+    namespace: argocd
+roleRef:
+  kind: ClusterRole
+  name: my-operator-clusterrole
+  apiGroup: rbac.authorization.k8s.io
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: application-operator
-  namespace: default
+  name: my-operator-deployment
+  namespace: argocd
+  labels:
+    app: my-operator
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: application-operator
+      app: my-operator
   template:
     metadata:
       labels:
-        app: application-operator
+        app: my-operator
     spec:
-      serviceAccountName: operator-ro
+      serviceAccountName: my-operator-sa
       containers:
-        - name: application-operator
-          image: eu.gcr.io/cymo-hogent-2025-operator/kopf-operator:latest  # Replace with your operator's image
-          imagePullPolicy: Always
-          env:
-            - name: KUBERNETES_SERVICE_HOST
-              valueFrom:
-                fieldRef:
-                  fieldPath: status.hostIP
-            - name: KUBERNETES_SERVICE_PORT
-              valueFrom:
-                fieldRef:
-                  fieldPath: status.podIP
-
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: operator-ro
-  namespace: default
-
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  namespace: default
-  rules:
-    - apiGroups: ["jones.com"]
-      resources: ["applicationtopics"]
-      verbs: ["create", "list", "get", "watch"]
-    - apiGroups: [""]
-      resources: ["pods"]
-      verbs: ["create"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: operator-ro-binding
-  namespace: default
-subjects:
-  - kind: ServiceAccount
-    name: operator-ro
-    namespace: default
-roleRef:
-  kind: Role
-  name: operator-ro
-  apiGroup: rbac.authorization.k8s.io
+        - name: operator
+          image: eu.gcr.io/cymo-hogent-2025-operator/kopf-operator:latest
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
