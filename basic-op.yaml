@@ -1,0 +1,64 @@
+---
+# Role granting necessary permissions within the 'argocd' namespace
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kopf-watcher-role
+  namespace: argocd # IMPORTANT: Role is namespaced
+rules:
+- apiGroups: ["jones.com"] # API Group of your CRDs
+  resources: ["contexts", "servicealts", "domaintopics", "applicationtopics"] # Plural names of your CRDs
+  verbs: ["get", "list", "watch", "patch", "update"] # Watch required, others useful for Kopf state
+- apiGroups: ["kopf.dev"] # Kopf needs to manage its own progress storage
+  resources: ["clusterkopfpeerings"]
+  verbs: ["list", "watch", "patch", "get"]
+- apiGroups: [""] # Core API group for Events
+  resources: ["events"]
+  verbs: ["create"]
+- apiGroups: [""] # Core API group for Kopf processing status
+  resources: ["pods"] # Needed if Kopf stores state on the pod itself (default)
+  verbs: ["patch"] # Needed to update annotations on the pod
+
+---
+# RoleBinding connecting the Role to the ServiceAccount in the 'argocd' namespace
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kopf-watcher-binding
+  namespace: argocd # IMPORTANT: RoleBinding is namespaced
+subjects:
+- kind: ServiceAccount
+  name: kafka-operator-sa # Your specified service account name
+  namespace: argocd       # Namespace of the service account
+roleRef:
+  kind: Role
+  name: kopf-watcher-role # Name of the Role created above
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kafka-operator-sa
+  namespace: argocd
+---
+# deployment.yaml (Updated for custom image)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: basic-kopf-watcher
+  namespace: argocd # Deploy the operator into the namespace it watches
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: basic-kopf-watcher
+  template:
+    metadata:
+      labels:
+        app: basic-kopf-watcher
+    spec:
+      serviceAccountName: kafka-operator-sa # Use the specified service account
+      containers:
+      - name: operator
+        image: eu.gcr.io/cymo-hogent-2025-operator/kopf-operator:latest
+        imagePullPolicy: Always

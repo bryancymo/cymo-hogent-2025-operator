@@ -1,10 +1,10 @@
-FROM python:3.10
+FROM python:3.9-slim
 
 WORKDIR /app
 
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
-COPY operator.py .
+COPY basic-op.py .
 
-CMD ["kopf", "run", "/app/operator2.py", "--verbose"]
+CMD ["kopf", "run", "/app/basic-op.py", "--verbose"]
