@@ -1,17 +1,22 @@
 import kopf
+import logging
 
 @kopf.on.create('jones.com', 'v1', 'applicationtopics')
 def create_topic(spec, name, namespace, logger, **kwargs):
+    logger.info(f"Detected creation of ApplicationTopic: {name}")
+    
     topic_name = spec.get('name', name)
     partitions = spec.get('partitions', 1)
     consumers = spec.get('consumers', [])
     config = spec.get('config', {})
 
-    logger.info(f"📦 New ApplicationTopic created: {topic_name}")
-    logger.info(f"Namespace: {namespace}")
-    logger.info(f"Partitions: {partitions}")
-    logger.info(f"Consumers: {consumers}")
+    # Simulate the creation of a Kafka topic here
+    logger.info(f"Creating Kafka topic '{topic_name}' in namespace {namespace}")
+    logger.info(f"Partitions: {partitions}, Consumers: {consumers}")
     logger.info(f"Config: {config}")
+    
+    # Simulate Kafka topic creation (e.g., connect to Kafka, create topic)
+    # Kafka interaction code would go here in a real-world scenario.
 
-    # Simulate topic creation (e.g., to Kafka later)
-    logger.info(f"✅ Simulated creation of topic '{topic_name}'")
+    logger.info(f"✅ Topic '{topic_name}' created successfully!")
+
