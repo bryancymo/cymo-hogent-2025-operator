@@ -2,11 +2,11 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: kafka-topic-operator
-  # namespace: your-operator-namespace # Uncomment and set if deploying operator to a specific namespace
+  namespace: argocd
   labels:
     app: kafka-topic-operator
 spec:
-  replicas: 1 # Use 1 replica with --standalone Kopf flag
+  replicas: 1
   selector:
     matchLabels:
       app: kafka-topic-operator
@@ -15,15 +15,13 @@ spec:
       labels:
         app: kafka-topic-operator
     spec:
-      serviceAccountName: kafka-topic-operator-sa # Reference the ServiceAccount created in rbac.yaml
+      serviceAccountName: kafka-topic-operator-sa
       containers:
         - name: operator
-          # Replace with your Artifact Registry image path
-          image: YOUR_REGION-docker.pkg.dev/YOUR_GCP_PROJECT_ID/YOUR_ARTIFACT_REPO_NAME/kafka-topic-operator:latest # Example: europe-west1-docker.pkg.dev/my-project/my-repo/kafka-topic-operator:v0.1.0
+          image: eu.gcr.io/cymo-hogent-2025-operator/kopf-operator:latest
           env:
             - name: CONFLUENT_BOOTSTRAP_SERVERS
-              value: "pkc-z1o60.europe-west1.gcp.confluent.cloud:9092" # <--- !!! REPLACE with your Confluent Cloud Bootstrap Server !!!
-          # Optional: Resource limits and requests
+              value: "http://pkc-z1o60.europe-west1.gcp.confluent.cloud:9092/"
           resources:
             requests:
               cpu: 100m
