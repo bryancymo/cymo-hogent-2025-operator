@@ -21,7 +21,7 @@ spec:
           image: eu.gcr.io/cymo-hogent-2025-operator/kopf-operator:latest
           env:
             - name: CONFLUENT_BOOTSTRAP_SERVERS
-              value: "http://pkc-z1o60.europe-west1.gcp.confluent.cloud:9092"
+              value: "pkc-z1o60.europe-west1.gcp.confluent.cloud:9092"
           resources:
             requests:
               cpu: 100m
