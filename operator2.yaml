@@ -38,7 +38,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: operator2-deployment
-  namespace: Yargocd
+  namespace: argocd
   labels:
     app: operator2
 spec:
