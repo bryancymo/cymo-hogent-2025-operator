@@ -11,7 +11,7 @@ spec:
     path: operator
   destination:
     server: https://kubernetes.default.svc
-    namespace: operator # or another namespace if needed
+    namespace: argocd
   syncPolicy:
     automated:
       selfHeal: true

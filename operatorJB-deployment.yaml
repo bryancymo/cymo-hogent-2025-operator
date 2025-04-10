@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-topic-operator
+  namespace: argocd
+  labels:
+    app: kafka-topic-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-topic-operator
+  template:
+    metadata:
+      labels:
+        app: kafka-topic-operator
+    spec:
+      serviceAccountName: kafka-topic-operator-sa
+      containers:
+        - name: operator
+          image: eu.gcr.io/cymo-hogent-2025-operator/kopf-operator:latest
+          env:
+            - name: CONFLUENT_BOOTSTRAP_SERVERS
+              value: "http://pkc-z1o60.europe-west1.gcp.confluent.cloud:9092/"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
