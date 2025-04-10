@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: applicationtopic-operator
+  labels:
+    app: applicationtopic-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: applicationtopic-operator
+  template:
+    metadata:
+      labels:
+        app: applicationtopic-operator
+    spec:
+      serviceAccountName: applicationtopic-operator
+      containers:
+        - name: operator
+          image: eu.gcr.io/cymo-hogent-2025-operator/kopf-operator:latest
+          args:
+            - "kopf"
+            - "run"
+            - "--verbose"
+            - "/app/operator-crd.py"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: applicationtopic-operator
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: applicationtopic-operator
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["jones.com"]
+    resources: ["applicationtopics"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: applicationtopic-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: applicationtopic-operator
+subjects:
+  - kind: ServiceAccount
+    name: applicationtopic-operator
+    namespace: default
