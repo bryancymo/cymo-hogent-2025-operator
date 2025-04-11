@@ -15,10 +15,11 @@ spec:
       labels:
         app: kafka-topic-operator
     spec:
-      serviceAccountName: kafka-topic-operator-sa
+      serviceAccountName: kafka-topic-operator-sa  # Use the already created ServiceAccount
       containers:
         - name: operator
           image: eu.gcr.io/cymo-hogent-2025-operator/kopf-operator:latest
+          imagePullPolicy: Always  # Ensure the image is always pulled
           env:
             - name: CONFLUENT_BOOTSTRAP_SERVERS
               value: "pkc-z1o60.europe-west1.gcp.confluent.cloud:9092"
@@ -29,44 +30,3 @@ spec:
             limits:
               cpu: 500m
               memory: 256Mi
-          volumeMounts:
-            - name: google-cloud-key
-              mountPath: /var/secrets/google
-              readOnly: true
-      volumes:
-        - name: google-cloud-key
-          secret:
-            secretName: google-cloud-key-secret
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: kafka-topic-operator-sa
-  namespace: argocd
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  namespace: argocd
-  name: kafka-topic-operator-role
-rules:
-  - apiGroups: [""]
-    resources: ["pods", "services"]
-    verbs: ["get", "list", "watch"]
-  - apiGroups: ["jones.com"]
-    resources: ["applicationtopics"]
-    verbs: ["get", "list", "watch", "create", "update", "delete"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: kafka-topic-operator-rolebinding
-  namespace: argocd
-subjects:
-  - kind: ServiceAccount
-    name: kafka-topic-operator-sa
-    namespace: argocd
-roleRef:
-  kind: Role
-  name: kafka-topic-operator-role
-  apiGroup: rbac.authorization.k8s.io
