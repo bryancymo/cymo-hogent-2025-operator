@@ -15,7 +15,7 @@ spec:
       labels:
         app: kafka-topic-operator
     spec:
-      serviceAccountName: intern-gke-cluster  # Ensure this matches the service account
+      serviceAccountName: intern-gke-cluster@cymo-hogent-2025-operator.iam.gserviceaccount.com # Ensure this matches the service account
       containers:
         - name: operator
           image: eu.gcr.io/cymo-hogent-2025-operator/kopf-operator:latest
