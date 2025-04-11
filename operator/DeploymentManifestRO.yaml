@@ -15,7 +15,7 @@ spec:
       labels:
         app: kafka-topic-operator
     spec:
-      serviceAccountName: intern-gke-cluster  # Changed to 'intern-gke-cluster'
+      serviceAccountName: intern-gke-cluster  # Ensure this matches the service account
       containers:
         - name: operator
           image: eu.gcr.io/cymo-hogent-2025-operator/kopf-operator:latest
@@ -30,7 +30,3 @@ spec:
             limits:
               cpu: 500m
               memory: 256Mi
-
-# IMPORTANT: This Deployment now uses the 'intern-gke-cluster' Kubernetes service account
-# that needs to be correctly mapped to the Google Cloud service account 
-# 'intern-gke-cluster@cymo-hogent-2025-operator.iam.gserviceaccount.com'.
