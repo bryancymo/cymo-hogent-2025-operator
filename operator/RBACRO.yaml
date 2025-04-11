@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: kafka-topic-operator-sa
+  name: kafka-topic-operator-sa  # Kubernetes service account
   namespace: argocd
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -24,9 +24,16 @@ metadata:
   namespace: argocd
 subjects:
   - kind: ServiceAccount
-    name: kafka-topic-operator-sa
+    name: kafka-topic-operator-sa  # Bind the Role to the Kubernetes service account
     namespace: argocd
 roleRef:
   kind: Role
   name: kafka-topic-operator-role
   apiGroup: rbac.authorization.k8s.io
+
+# IMPORTANT: This RBAC configuration grants permissions *within* the Kubernetes cluster to the
+# 'kafka-topic-operator-sa' Kubernetes service account.
+# It does NOT grant Google Cloud IAM permissions.
+# The Google Cloud IAM permissions are handled separately and are needed to pull images from GCR/Artifact Registry.
+# The google cloud service account 'intern-gke-cluster@cymo-hogent-2025-operator.iam.gserviceaccount.com' needs the correct permissions.
+# Or, the kubernetes service account needs to be correctly mapped to that google cloud service account.
