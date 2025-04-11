@@ -1,5 +1,5 @@
 # Use a minimal Python base image
-FROM python:3.11-slim
+FROM python:latest
 
 # Install dependencies
 RUN pip install --no-cache-dir kopf kubernetes
