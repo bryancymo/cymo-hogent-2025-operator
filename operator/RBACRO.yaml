@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kafka-topic-operator-sa
+  namespace: argocd
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kafka-topic-operator-role
+  namespace: argocd
+rules:
+  - apiGroups: ["jones.com"]
+    resources: ["applicationtopics"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods", "services", "endpoints", "configmaps", "secrets"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kafka-topic-operator-rb
+  namespace: argocd
+subjects:
+  - kind: ServiceAccount
+    name: kafka-topic-operator-sa
+    namespace: argocd
+roleRef:
+  kind: Role
+  name: kafka-topic-operator-role
+  apiGroup: rbac.authorization.k8s.io

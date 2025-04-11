@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-topic-operator
+  namespace: argocd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-topic-operator
+  template:
+    metadata:
+      labels:
+        app: kafka-topic-operator
+    spec:
+      serviceAccountName: kafka-topic-operator-sa
+      containers:
+        - name: operator
+          image: eu.gcr.io/cymo-hogent-2025-operator/kopf-operator:latest
+          imagePullPolicy: Always
