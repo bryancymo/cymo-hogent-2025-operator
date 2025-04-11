@@ -15,7 +15,7 @@ spec:
       labels:
         app: kafka-topic-operator
     spec:
-      serviceAccountName: kafka-topic-operator-sa  # Kubernetes service account used by the Pod
+      serviceAccountName: intern-gke-cluster  # Changed to 'intern-gke-cluster'
       containers:
         - name: operator
           image: eu.gcr.io/cymo-hogent-2025-operator/kopf-operator:latest
@@ -31,7 +31,6 @@ spec:
               cpu: 500m
               memory: 256Mi
 
-# IMPORTANT: This Deployment uses the 'kafka-topic-operator-sa' Kubernetes service account.
-# This Kubernetes service account needs to be correctly mapped to the Google Cloud service account
-# 'intern-gke-cluster@cymo-hogent-2025-operator.iam.gserviceaccount.com' to pull images from GCR/Artifact Registry.
-# The mapping is done either via the nodes default service account, or via workload identity.
+# IMPORTANT: This Deployment now uses the 'intern-gke-cluster' Kubernetes service account
+# that needs to be correctly mapped to the Google Cloud service account 
+# 'intern-gke-cluster@cymo-hogent-2025-operator.iam.gserviceaccount.com'.
