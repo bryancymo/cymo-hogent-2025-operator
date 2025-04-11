@@ -24,7 +24,7 @@ metadata:
   namespace: argocd
 subjects:
   - kind: ServiceAccount
-    name: intern-gke-cluster@cymo-hogent-2025-operator.iam.gserviceaccount.com  # Changed to 'intern-gke-cluster'
+    name: intern-gke-cluster  # Changed to 'intern-gke-cluster'
     namespace: argocd
 roleRef:
   kind: Role
