@@ -15,11 +15,11 @@ spec:
       labels:
         app: kafka-topic-operator
     spec:
-      serviceAccountName: kafka-topic-operator-sa  # Use the already created ServiceAccount
+      serviceAccountName: kafka-topic-operator-sa  # Use the ServiceAccount
       containers:
         - name: operator
           image: eu.gcr.io/cymo-hogent-2025-operator/kopf-operator:latest
-          imagePullPolicy: Always  # Ensure the image is always pulled
+          imagePullPolicy: Always
           env:
             - name: CONFLUENT_BOOTSTRAP_SERVERS
               value: "pkc-z1o60.europe-west1.gcp.confluent.cloud:9092"
