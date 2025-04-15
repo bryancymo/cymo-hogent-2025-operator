@@ -35,12 +35,3 @@ spec:
   consumers:
     - service1
     - service2
----
-apiVersion: jones.com/v1
-kind: Servicealt
-metadata:
-  name: example-servicealt
-spec:
-  name: myservice
-  contextLink: context-link
-  secretSolution: supersecret
