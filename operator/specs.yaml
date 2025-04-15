@@ -1,9 +1,0 @@
-spec:
-  template:
-    spec:
-      containers:
-        - name: argocd-application-controller
-          resources:
-            requests:
-              cpu: 60m
-              memory: 350Mi
