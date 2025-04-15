@@ -10,9 +10,12 @@ metadata:
   name: kafka-topic-operator-role
   namespace: argocd
 rules:
+  # Grant permissions for all jones.com CRDs
   - apiGroups: ["jones.com"]
-    resources: ["applicationtopics"]
+    resources: ["contexts", "servicealts", "domaintopics", "applicationtopics"]  # Include all CRDs here
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # Grant permissions for other core Kubernetes resources
   - apiGroups: [""]
     resources: ["pods", "services", "endpoints", "configmaps", "secrets"]
     verbs: ["get", "list", "watch"]
