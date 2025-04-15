@@ -10,7 +10,7 @@ log = logging.getLogger()
 
 # Use multiple decorators for the same handler function
 # Watch for creation events in the 'argocd' namespace specifically
-@kopf.on.create('jones.com', 'v1', 'contexts', namespace='argocd')
+@kopf.on.create('jones.com', 'v1',  'contexts', namespace='argocd')
 @kopf.on.create('jones.com', 'v1', 'servicealts', namespace='argocd')
 @kopf.on.create('jones.com', 'v1', 'domaintopics', namespace='argocd')
 @kopf.on.create('jones.com', 'v1', 'applicationtopics', namespace='argocd')
