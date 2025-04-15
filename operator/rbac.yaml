@@ -5,33 +5,41 @@ metadata:
   namespace: argocd
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
+kind: ClusterRole
 metadata:
-  name: kafka-topic-operator-role
-  namespace: argocd
+  name: kafka-topic-operator-cluster-role
 rules:
-  # Grant permissions for all jones.com CRDs
+  # Allow access to all CRDs in the jones.com API group
   - apiGroups: ["jones.com"]
-    resources: ["contexts", "servicealts", "domaintopics", "applicationtopics"]  # Include all CRDs here
+    resources: ["contexts", "servicealts", "domaintopics", "applicationtopics"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
-  # Grant permissions for other core Kubernetes resources
+  # Allow access to custom resource definitions in the apiextensions.k8s.io API group
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["get", "list", "watch"]
+
+  # Grant permissions for standard Kubernetes resources
   - apiGroups: [""]
     resources: ["pods", "services", "endpoints", "configmaps", "secrets"]
     verbs: ["get", "list", "watch"]
+
+  # Allow Kopf to create events in any namespace
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
+kind: ClusterRoleBinding
 metadata:
-  name: kafka-topic-operator-rb
-  namespace: argocd
+  name: kafka-topic-operator-cluster-rb
 subjects:
   - kind: ServiceAccount
-    name: intern-gke-cluster  # Changed to 'intern-gke-cluster'
+    name: intern-gke-cluster
     namespace: argocd
 roleRef:
-  kind: Role
-  name: kafka-topic-operator-role
+  kind: ClusterRole
+  name: kafka-topic-operator-cluster-role
   apiGroup: rbac.authorization.k8s.io
 
 # IMPORTANT: This RBAC configuration grants permissions *within* the Kubernetes cluster to the
