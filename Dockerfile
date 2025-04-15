@@ -11,4 +11,4 @@ WORKDIR /app
 COPY operator.py .
 
 # Run the operator
-CMD ["kopf", "run", "--standalone", "OperatorRO.py"]
+CMD ["kopf", "run", "--standalone", "operator.py"]
