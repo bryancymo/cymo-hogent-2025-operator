@@ -78,3 +78,4 @@ def update_servicealt(spec, name, namespace, logger, **kwargs):
 def delete_servicealt(spec, name, namespace, logger, **kwargs):
     logger.info(f"[Servicealt] Deleted: '{name}' in namespace '{namespace}'")
     return {"message": f"Servicealt '{name}' deletion logged."}
+ # type: ignore
