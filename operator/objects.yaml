@@ -1,30 +1,46 @@
 apiVersion: jones.com/v1
-kind: Environment
+kind: Context
 metadata:
-  name: test-environment
+  name: test-context
   namespace: operator
 spec:
-  context:
-    name: test-context
-    owner: your-owner
-    developerGroups:
-      - dev-group1
-      - dev-group2
-  services:
-    - name: test-servicealt
-      contextLink: test-context
-      secretSolution: test-secret
-    - name: example-servicealt
-      contextLink: test-context
-      secretSolution: supersecret
-  applications:
-    - name: test-topic
-      namespace: argocd
-      config:
-        retentionMs: 3600000
-        replicationFactor: 2
-        cleanupPolicy: delete
-      partitions: 3
-      consumers:
-        - service1
-        - service2
+  name: test-context
+  owner: your-owner
+  developerGroups:
+    - dev-group1
+    - dev-group2
+---
+apiVersion: jones.com/v1
+kind: Servicealt
+metadata:
+  name: test-servicealt
+  namespace: operator
+spec:
+  name: test-servicealt
+  contextLink: test-context
+  secretSolution: test-secret
+---
+apiVersion: jones.com/v1
+kind: ApplicationTopic
+metadata:
+  name: test-topic
+  namespace: argocd
+spec:
+  name: my-app-topic
+  partitions: 3
+  config:
+    retentionMs: 3600000
+    replicationFactor: 2
+    cleanupPolicy: delete
+  consumers:
+    - service1
+    - service2
+---
+apiVersion: jones.com/v1
+kind: Servicealt
+metadata:
+  name: example-servicealt
+spec:
+  name: myservice
+  contextLink: context-link
+  secretSolution: supersecret
