@@ -1,4 +1,3 @@
-# operator.py
 import kopf
 import logging
 
@@ -11,8 +10,5 @@ def create_application_topic(spec, name, namespace, logger, **kwargs):
 
     logger.info(f"Creating topic '{topic_name}' in namespace '{namespace}'")
     logger.info(f"Partitions: {partitions}, Config: {config}, Consumers: {consumers}")
-
-    # Simulated Kafka topic creation (for now)
-    # You'd integrate with Kafka here
 
     return {"message": f"Topic '{topic_name}' creation simulated."}
