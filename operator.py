@@ -1,5 +1,9 @@
 import kopf
 import logging
+import base64
+import requests
+from kubernetes import client, config
+
 
 logging.basicConfig(level=logging.INFO)
 
@@ -66,7 +70,19 @@ def delete_context(spec, name, namespace, logger, **kwargs):
 def create_servicealt(spec, name, namespace, logger, **kwargs):
     logger.info(f"[Servicealt] Created: '{name}' in namespace '{namespace}'")
     logger.info(f"ContextLink: {spec.get('contextLink')}, SecretSolution: {spec.get('secretSolution')}")
-    return {"message": f"Servicealt '{name}' creation logged."}
+
+    try:
+        api_key, api_secret = get_confluent_credentials(namespace='argocd')
+        sa_response = create_confluent_service_account(name, "Service account for Servicealt", api_key, api_secret)
+        logger.info(f"Service account created: ID={sa_response['id']} Name={sa_response['display_name']}")
+    except requests.HTTPError as e:
+        logger.error(f"Failed to create Confluent service account: {e.response.text}")
+        raise kopf.TemporaryError("Retrying service account creation", delay=30)
+    except Exception as e:
+        logger.error(f"Unexpected error during service account creation: {str(e)}")
+        raise
+
+    return {"message": f"Servicealt '{name}' creation logged, service account created."}
 
 @kopf.on.update('jones.com', 'v1', 'servicealts')
 def update_servicealt(spec, name, namespace, logger, **kwargs):
@@ -79,3 +95,26 @@ def delete_servicealt(spec, name, namespace, logger, **kwargs):
     logger.info(f"[Servicealt] Deleted: '{name}' in namespace '{namespace}'")
     return {"message": f"Servicealt '{name}' deletion logged."}
  # type: ignore
+
+
+
+
+# Confluent
+def get_confluent_credentials(namespace='argocd'):
+    config.load_incluster_config()
+    v1 = client.CoreV1Api()
+    secret = v1.read_namespaced_secret("confluent-credentials", namespace)
+    api_key = base64.b64decode(secret.data["API_KEY"]).decode("utf-8")
+    api_secret = base64.b64decode(secret.data["API_SECRET"]).decode("utf-8")
+    return api_key, api_secret
+
+
+def create_confluent_service_account(name, description, api_key, api_secret):
+    url = "https://api.confluent.cloud/iam/v2/service-accounts"
+    payload = {
+        "display_name": name,
+        "description": description
+    }
+    response = requests.post(url, json=payload, auth=(api_key, api_secret))
+    response.raise_for_status()
+    return response.json()

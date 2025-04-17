@@ -1,3 +1,5 @@
 kopf
 kubernetes
 confluent-kafka
+base64
+requests
