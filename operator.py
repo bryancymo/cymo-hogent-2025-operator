@@ -9,6 +9,10 @@ from kubernetes import client, config
 
 logging.basicConfig(level=logging.INFO)
 
+@kopf.on.startup()
+def configure(settings: kopf.OperatorSettings, **_):
+    settings.watching.namespaces = ['argocd', 'operator']
+
 # Constants
 MAX_RETRIES = 5
 MAX_DELAY = 300  # in seconds
