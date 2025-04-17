@@ -134,26 +134,48 @@ def delete_servicealt(spec, name, namespace, logger, **kwargs):
 # Confluent helpers
 def get_confluent_credentials(namespace='argocd'):
     try:
+        logger = logging.getLogger(__name__)
+        logger.info(f"[Confluent] Loading credentials from namespace '{namespace}'")
         config.load_incluster_config()
         v1 = client.CoreV1Api()
         secret = v1.read_namespaced_secret("confluent-credentials", namespace)
         api_key = base64.b64decode(secret.data["API_KEY"]).decode("utf-8")
         api_secret = base64.b64decode(secret.data["API_SECRET"]).decode("utf-8")
+        logger.info("[Confluent] Credentials loaded successfully")
         return api_key, api_secret
     except client.exceptions.ApiException as e:
-        raise RuntimeError(f"Failed to read secret from namespace '{namespace}': {e}")
+        raise RuntimeError(f"[Confluent] Failed to read secret from namespace '{namespace}': {e}")
     except KeyError as e:
-        raise ValueError(f"Missing key in secret: {e}")
+        raise ValueError(f"[Confluent] Missing key in secret: {e}")
     except Exception as e:
-        raise RuntimeError(f"Error fetching Confluent credentials: {e}")
+        raise RuntimeError(f"[Confluent] Error fetching Confluent credentials: {e}")
 
 
 def create_confluent_service_account(name, description, api_key, api_secret):
+    logger = logging.getLogger(__name__)
     url = "https://api.confluent.cloud/iam/v2/service-accounts"
     payload = {
         "display_name": name,
         "description": description
     }
+    
+    logger.info(f"[Confluent] Creating service account: '{name}'")
     response = requests.post(url, json=payload, auth=(api_key, api_secret))
+
+    try:
+        response.raise_for_status()
+    except requests.HTTPError as e:
+        logger.error(f"[Confluent] Failed to create service account '{name}': {e.response.text}")
+        raise
+
+    data = response.json()
+    logger.info(f"[Confluent] Service account created: ID={data.get('id')} Name={data.get('display_name')}")
+    return data
+
+def get_confluent_service_account_by_name(name, api_key, api_secret):
+    url = "https://api.confluent.cloud/iam/v2/service-accounts"
+    response = requests.get(url, auth=(api_key, api_secret))
     response.raise_for_status()
-    return response.json()
+    accounts = response.json().get("data", [])
+    return next((acct for acct in accounts if acct.get("display_name") == name), None)
+
