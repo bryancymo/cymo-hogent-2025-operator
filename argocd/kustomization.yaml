@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- ./install.yaml
+
+patches:
+- target:
+    group: apps
+    version: v1
+    kind: StatefulSet
+    name: argocd-application-controller
+  patch: |-
+    - op: add
+      path: /spec/template/spec/containers/0/resources
+      value: 
+          requests:
+            cpu: 80m
+            memory: 350Mi
+            ephemeral-storage: 500Mi
+          limits:
+            ephemeral-storage: 500Mi
