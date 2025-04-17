@@ -44,3 +44,13 @@ spec:
   name: myservice
   contextLink: context-link
   secretSolution: supersecret
+---
+apiVersion: jones.com/v1
+kind: Servicealt
+metadata:
+  name: my-new-servicealt
+  namespace: argocd
+spec:
+  name: testingservice
+  contextLink: context-link
+  secretSolution: supersecret
