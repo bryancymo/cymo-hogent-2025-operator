@@ -1,15 +1,9 @@
 import kopf
 import logging
-<<<<<<< HEAD
 import base64
 import requests
 from kubernetes import client, config
 
-=======
-import asyncio
-import random
-from functools import wraps
->>>>>>> 9f403363a5476346ae879a9d7b8f6bd33be1f05a
 
 logging.basicConfig(level=logging.INFO)
 
