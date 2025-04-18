@@ -135,10 +135,11 @@ def delete_servicealt(spec, name, namespace, logger, **kwargs):
     return {"message": f"Servicealt '{name}' deletion logged."}
 
 
-# Confluent helpers
+# Confluent
+logger = logging.getLogger(__name__)
+
 def get_confluent_credentials(namespace='argocd'):
     try:
-        logger = logging.getLogger(__name__)
         logger.info(f"[Confluent] Loading credentials from namespace '{namespace}'")
         config.load_incluster_config()
         v1 = client.CoreV1Api()
@@ -154,9 +155,7 @@ def get_confluent_credentials(namespace='argocd'):
     except Exception as e:
         raise RuntimeError(f"[Confluent] Error fetching Confluent credentials: {e}")
 
-
 def create_confluent_service_account(name, description, api_key, api_secret):
-    logger = logging.getLogger(__name__)
     url = "https://api.confluent.cloud/iam/v2/service-accounts"
     payload = {
         "display_name": name,
@@ -177,9 +176,24 @@ def create_confluent_service_account(name, description, api_key, api_secret):
     return data
 
 def get_confluent_service_account_by_name(name, api_key, api_secret):
+    logger.info(f"[Confluent] Searching for service account by name: '{name}'")
     url = "https://api.confluent.cloud/iam/v2/service-accounts"
-    response = requests.get(url, auth=(api_key, api_secret))
-    response.raise_for_status()
-    accounts = response.json().get("data", [])
-    return next((acct for acct in accounts if acct.get("display_name") == name), None)
+    try:
+        response = requests.get(url, auth=(api_key, api_secret))
+        response.raise_for_status()
+        accounts = response.json().get("data", [])
+        logger.debug(f"[Confluent] Retrieved {len(accounts)} service accounts")
 
+        matched = next((acct for acct in accounts if acct.get("display_name") == name), None)
+        if matched:
+            logger.info(f"[Confluent] Found matching service account: ID={matched.get('id')} Name={matched.get('display_name')}")
+        else:
+            logger.warning(f"[Confluent] No matching service account found with name: '{name}'")
+
+        return matched
+    except requests.HTTPError as e:
+        logger.error(f"[Confluent] HTTP error while retrieving service accounts: {e.response.status_code} - {e.response.text}")
+        raise
+    except Exception as e:
+        logger.exception("[Confluent] Unexpected error while retrieving service accounts")
+        raise
