@@ -8,7 +8,7 @@ RUN pip install --no-cache-dir kopf kubernetes
 WORKDIR /app
 
 # Copy your operator code into the image
-COPY operator.py .
+COPY kube_operator.py .
 
 # Run the operator
 CMD ["kopf", "run", "--standalone", "kube_operator.py"]
