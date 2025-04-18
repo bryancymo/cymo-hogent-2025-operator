@@ -60,24 +60,6 @@ def create_application_topic(spec, name, namespace, logger, **kwargs):
 
     return {"message": f"Topic '{topic_name}' created successfully."}
 
-retry = kwargs.get("retry", 0)
-
-def run():
-    api_key, api_secret = get_confluent_credentials(namespace='argocd')
-    topic = create_confluent_topic(
-        name=spec["name"],
-        partitions=spec.get("partitions", 3),
-        config=spec.get("config", {}),
-        api_key=api_key,
-        api_secret=api_secret,
-        cluster_id="lkc-n9z7v3",  # replace with your actual ID
-        rest_endpoint="https://pkc-z1o60.europe-west1.gcp.confluent.cloud:443"  # replace with your cluster REST endpoint
-    )
-    logger.info(f"[Confluent] Topic created: {topic}")
-    return topic
-
-retry_with_backoff(run, retry, logger, error_msg="Failed to create topic")
-
 
 @kopf.on.update('jones.com', 'v1', 'applicationtopics')
 def update_application_topic(spec, name, namespace, logger, **kwargs):
@@ -229,25 +211,31 @@ def get_confluent_service_account_by_name(name, api_key, api_secret):
         logger.exception("[Confluent] Unexpected error while retrieving service accounts")
         raise
 
-def create_confluent_topic(name, partitions, config, api_key, api_secret, cluster_id, rest_endpoint):
-    url = f"{rest_endpoint}/kafka/v3/clusters/{cluster_id}/topics"
-    headers = {
-        "Content-Type": "application/json"
-    }
+@kopf.on.create('jones.com', 'v1', 'applicationtopics')
+def create_application_topic(spec, name, namespace, logger, **kwargs):
+    logger.info(f"[ApplicationTopic] Created: '{name}' in namespace '{namespace}'")
+    logger.info(f"Partitions: {spec.get('partitions')}, Config: {spec.get('config')}, Consumers: {spec.get('consumers')}")
 
-    topic_config = []
-    if "retentionMs" in config:
-        topic_config.append({"name": "retention.ms", "value": str(config["retentionMs"])})
-    if "cleanupPolicy" in config:
-        topic_config.append({"name": "cleanup.policy", "value": config["cleanupPolicy"]})
+    retry = kwargs.get("retry", 0)
 
-    payload = {
-        "topic_name": name,
-        "partitions_count": partitions,
-        "replication_factor": config.get("replicationFactor", 3),
-        "configs": topic_config
-    }
+    def run():
+        # 1. Get Confluent credentials
+        api_key, api_secret = get_confluent_credentials(namespace='argocd')
 
-    response = requests.post(url, json=payload, auth=(api_key, api_secret), headers=headers)
-    response.raise_for_status()
-    return response.json()
+        # 2. Your cluster ID and REST endpoint — replace these
+        cluster_id = "lkc-n9z7v3"  # <- YOUR Confluent Kafka cluster ID
+        rest_endpoint = "https://pkc-z1o60.europe-west1.gcp.confluent.cloud:443"  # <- FROM UI/API
+
+        # 3. Create topic in Confluent Cloud
+        topic_name = spec.get("name") or name
+        partitions = spec.get("partitions", 1)
+        config = spec.get("config", {})
+
+        logger.info(f"[Confluent] Creating topic '{topic_name}' on cluster '{cluster_id}'")
+        create_confluent_topic(topic_name, partitions, config, api_key, api_secret, cluster_id, rest_endpoint)
+        logger.info(f"[Confluent] Topic '{topic_name}' successfully created")
+
+    retry_with_backoff(run, retry, logger, error_msg="Failed to create Confluent topic")
+
+    return {"message": f"Topic '{name}' creation triggered in Confluent Cloud."}
+
