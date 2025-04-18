@@ -11,7 +11,7 @@ spec:
     - dev-group2
 ---
 apiVersion: jones.com/v1
-kind: servicealt
+kind: Servicealt
 metadata:
   name: test-servicealt
   namespace: operator
