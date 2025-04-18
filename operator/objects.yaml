@@ -13,12 +13,12 @@ spec:
 apiVersion: jones.com/v1
 kind: Servicealt
 metadata:
-  name: test-failure
+  name: retry-test
   namespace: argocd
 spec:
-  name: test-failure
-  contextLink: "context-abc"
-  secretSolution: "none"
+  name: retry-test
+  contextLink: dummy
+  secretSolution: none
 ---
 apiVersion: jones.com/v1
 kind: ApplicationTopic
