@@ -13,12 +13,12 @@ spec:
 apiVersion: jones.com/v1
 kind: Servicealt
 metadata:
-  name: test-servicealt
-  namespace: operator
+  name: test-failure
+  namespace: argocd
 spec:
-  name: test-servicealt
-  contextLink: test-context
-  secretSolution: test-secret
+  name: test-failure
+  contextLink: "context-abc"
+  secretSolution: "none"
 ---
 apiVersion: jones.com/v1
 kind: ApplicationTopic
