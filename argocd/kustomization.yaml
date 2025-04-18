@@ -16,11 +16,11 @@ patches:
       path: /spec/template/spec/containers/0/resources
       value: 
         requests:
-          cpu: 70m
-          memory: 270Mi
+          cpu: 100m
+          memory: 400Mi
         limits:
           ephemeral-storage: 500Mi
-          memory: 350Mi
+          memory: 500Mi
           cpu: 150m
 
 - target:
@@ -119,7 +119,7 @@ patches:
       value:
         requests:
           cpu: 20m
-          memory: 100Mi
+          memory: 150Mi
         limits:
           ephemeral-storage: 1000Mi
           memory: 200Mi
