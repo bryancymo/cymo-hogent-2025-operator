@@ -14,9 +14,112 @@ patches:
     - op: add
       path: /spec/template/spec/containers/0/resources
       value: 
-          requests:
-            cpu: 80m
-            memory: 350Mi
-            ephemeral-storage: 500Mi
-          limits:
-            ephemeral-storage: 500Mi
+        requests:
+          cpu: 70m
+          memory: 270Mi
+        limits:
+          ephemeral-storage: 500Mi
+          memory: 350Mi
+          cpu: 150m
+
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: argocd-applicationset-controller
+  patch: |-
+    - op: add
+      path: /spec/template/spec/containers/0/resources
+      value:
+        requests:
+          cpu: 20m
+          memory: 50Mi
+        limits:
+          ephemeral-storage: 500Mi
+          memory: 100Mi
+          cpu: 100m
+
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: argocd-dex-server
+  patch: |-
+    - op: add
+      path: /spec/template/spec/containers/0/resources
+      value:
+        requests:
+          cpu: 20m
+          memory: 150Mi
+        limits:
+          ephemeral-storage: 500Mi
+          memory: 250Mi
+          cpu: 100m
+
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: argocd-notifications-controller
+  patch: |-
+    - op: add
+      path: /spec/template/spec/containers/0/resources
+      value:
+        requests:
+          cpu: 10m
+          memory: 50Mi
+        limits:
+          ephemeral-storage: 100Mi
+          memory: 100Mi
+          cpu: 100m
+
+- target:
+    group: apps
+    version: v1
+    kind: StatefulSet
+    name: argocd-redis
+  patch: |-
+    - op: add
+      path: /spec/template/spec/containers/0/resources
+      value:
+        requests:
+          cpu: 10m
+          memory: 50Mi
+        limits:
+          ephemeral-storage: 200Mi
+          memory: 100Mi
+          cpu: 100m
+
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: argocd-repo-server
+  patch: |-
+    - op: add
+      path: /spec/template/spec/containers/0/resources
+      value:
+        requests:
+          cpu: 10m
+          memory: 100Mi
+        limits:
+          ephemeral-storage: 1000Mi
+          memory: 150Mi
+          cpu: 50m
+
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: argocd-server
+  patch: |-
+    - op: add
+      path: /spec/template/spec/containers/0/resources
+      value:
+        requests:
+          cpu: 20m
+          memory: 100Mi
+        limits:
+          ephemeral-storage: 1000Mi
+          memory: 200Mi
+          cpu: 50m
