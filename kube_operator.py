@@ -60,6 +60,24 @@ def create_application_topic(spec, name, namespace, logger, **kwargs):
 
     return {"message": f"Topic '{topic_name}' created successfully."}
 
+retry = kwargs.get("retry", 0)
+
+def run():
+    api_key, api_secret = get_confluent_credentials(namespace='argocd')
+    topic = create_confluent_topic(
+        name=spec["name"],
+        partitions=spec.get("partitions", 3),
+        config=spec.get("config", {}),
+        api_key=api_key,
+        api_secret=api_secret,
+        cluster_id="lkc-n9z7v3",  # replace with your actual ID
+        rest_endpoint="https://pkc-z1o60.europe-west1.gcp.confluent.cloud:443"  # replace with your cluster REST endpoint
+    )
+    logger.info(f"[Confluent] Topic created: {topic}")
+    return topic
+
+retry_with_backoff(run, retry, logger, error_msg="Failed to create topic")
+
 
 @kopf.on.update('jones.com', 'v1', 'applicationtopics')
 def update_application_topic(spec, name, namespace, logger, **kwargs):
@@ -211,21 +229,22 @@ def get_confluent_service_account_by_name(name, api_key, api_secret):
         logger.exception("[Confluent] Unexpected error while retrieving service accounts")
         raise
 
-def create_confluent_topic(name, partitions, config, api_key, api_secret):
-    url = "https://api.confluent.cloud/kafka/v3/clusters/lkc-n9z7v3/topics"  # <-- UPDATE THIS
+def create_confluent_topic(name, partitions, config, api_key, api_secret, cluster_id, rest_endpoint):
+    url = f"{rest_endpoint}/kafka/v3/clusters/{cluster_id}/topics"
     headers = {
         "Content-Type": "application/json"
     }
 
-    # Example topic config formatting
-    topic_config = [
-        {"name": "retention.ms", "value": str(config.get("retentionMs", 3600000))},
-        {"name": "cleanup.policy", "value": config.get("cleanupPolicy", "delete")}
-    ]
+    topic_config = []
+    if "retentionMs" in config:
+        topic_config.append({"name": "retention.ms", "value": str(config["retentionMs"])})
+    if "cleanupPolicy" in config:
+        topic_config.append({"name": "cleanup.policy", "value": config["cleanupPolicy"]})
 
     payload = {
         "topic_name": name,
         "partitions_count": partitions,
+        "replication_factor": config.get("replicationFactor", 3),
         "configs": topic_config
     }
 
