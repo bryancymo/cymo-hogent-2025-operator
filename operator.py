@@ -143,8 +143,8 @@ def get_confluent_credentials(namespace='argocd'):
         config.load_incluster_config()
         v1 = client.CoreV1Api()
         secret = v1.read_namespaced_secret("confluent-credentials", namespace)
-        api_key = base64.b64decode(secret.data[api_key]).decode("utf-8")
-        api_secret = base64.b64decode(secret.data[api_secret]).decode("utf-8")
+        api_key = base64.b64decode(secret.data['API_KEY']).decode("utf-8")
+        api_secret = base64.b64decode(secret.data['API_SECRET']).decode("utf-8")
         logger.info("[Confluent] Credentials loaded successfully")
         return api_key, api_secret
     except client.exceptions.ApiException as e:
