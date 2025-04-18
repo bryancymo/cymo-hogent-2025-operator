@@ -17,16 +17,16 @@ spec:
     spec:
       serviceAccountName: intern-gke-cluster # Ensure this matches the service account
       containers:
-        - name: operator
-          image: eu.gcr.io/cymo-hogent-2025-operator/kopf-operator:latest
-          imagePullPolicy: Always
-          env:
-            - name: CONFLUENT_BOOTSTRAP_SERVERS
-              value: "pkc-z1o60.europe-west1.gcp.confluent.cloud:9092"
-          resources:
-            requests:
-              cpu: 100m
-              memory: 128Mi
-            limits:
-              cpu: 500m
-              memory: 256Mi
+      - name: operator
+        image: eu.gcr.io/cymo-hogent-2025-operator/kopf-operator:latest
+        imagePullPolicy: Always
+        env:
+        - name: CONFLUENT_BOOTSTRAP_SERVERS
+          value: "pkc-z1o60.europe-west1.gcp.confluent.cloud:9092"
+        resources:
+          requests:
+            cpu: 10m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
