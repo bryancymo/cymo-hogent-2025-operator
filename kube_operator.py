@@ -156,22 +156,43 @@ def delete_servicealt(spec, name, namespace, logger, **kwargs):
 # Confluent
 logger = logging.getLogger(__name__)
 
-def get_confluent_credentials(namespace='argocd'):
+def get_all_confluent_credentials(namespace='argocd'):
     try:
         logger.info(f"[Confluent] Loading credentials from namespace '{namespace}'")
         config.load_incluster_config()
         v1 = client.CoreV1Api()
-        secret = v1.read_namespaced_secret("confluent-credentials", namespace)
-        api_key = base64.b64decode(secret.data['API_KEY']).decode("utf-8")
-        api_secret = base64.b64decode(secret.data['API_SECRET']).decode("utf-8")
-        logger.info("[Confluent] Credentials loaded successfully")
-        return api_key, api_secret
+
+        # List all secrets in the given namespace
+        secrets = v1.list_namespaced_secret(namespace)
+        
+        # Initialize a dictionary to store credentials
+        credentials = {}
+
+        for secret in secrets.items:
+            # Check if the secret name contains 'confluent' (or any other criteria for filtering)
+            if 'confluent' in secret.metadata.name:
+                try:
+                    api_key = base64.b64decode(secret.data['API_KEY']).decode("utf-8")
+                    api_secret = base64.b64decode(secret.data['API_SECRET']).decode("utf-8")
+                    # Store the credentials in the dictionary
+                    credentials[secret.metadata.name] = {
+                        'api_key': api_key,
+                        'api_secret': api_secret
+                    }
+                except KeyError:
+                    logger.warning(f"[Confluent] Missing API_KEY or API_SECRET in secret '{secret.metadata.name}'")
+
+        if not credentials:
+            logger.warning(f"[Confluent] No relevant secrets found in namespace '{namespace}'")
+        else:
+            logger.info(f"[Confluent] Found {len(credentials)} relevant secrets.")
+
+        return credentials
     except client.exceptions.ApiException as e:
-        raise RuntimeError(f"[Confluent] Failed to read secret from namespace '{namespace}': {e}")
-    except KeyError as e:
-        raise ValueError(f"[Confluent] Missing key in secret: {e}")
+        raise RuntimeError(f"[Confluent] Failed to read secrets from namespace '{namespace}': {e}")
     except Exception as e:
         raise RuntimeError(f"[Confluent] Error fetching Confluent credentials: {e}")
+
 
 def create_confluent_service_account(name, description, api_key, api_secret):
     url = "https://api.confluent.cloud/iam/v2/service-accounts"
