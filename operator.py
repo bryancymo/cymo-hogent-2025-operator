@@ -112,7 +112,10 @@ def create_servicealt(spec, name, namespace, logger, **kwargs):
     retry = kwargs.get("retry", 0)
 
     def run():
-        raise Exception("Simulated failure for testing retries")
+        api_key, api_secret = get_confluent_credentials(namespace='argocd')
+        sa_response = create_confluent_service_account(name, "Service account for Servicealt", api_key, api_secret)
+        logger.info(f"Service account created: ID={sa_response['id']} Name={sa_response['display_name']}")
+        return sa_response
 
     retry_with_backoff(run, retry, logger, error_msg="Failed to create service account")
 

@@ -13,12 +13,12 @@ spec:
 apiVersion: jones.com/v1
 kind: servicealt
 metadata:
-  name: retry-test
-  namespace: argocd
+  name: test-servicealt
+  namespace: operator
 spec:
-  name: retry-test
-  contextLink: dummy
-  secretSolution: none
+  name: test-servicealt
+  contextLink: test-context
+  secretSolution: test-secret
 ---
 apiVersion: jones.com/v1
 kind: ApplicationTopic
