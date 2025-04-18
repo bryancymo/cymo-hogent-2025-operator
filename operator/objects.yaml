@@ -11,7 +11,7 @@ spec:
     - dev-group2
 ---
 apiVersion: jones.com/v1
-kind: Servicealt
+kind: servicealt
 metadata:
   name: retry-test
   namespace: argocd
