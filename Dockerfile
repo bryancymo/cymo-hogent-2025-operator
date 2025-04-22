@@ -2,7 +2,7 @@
 FROM python:latest
 
 # Install dependencies
-RUN pip install --no-cache-dir kopf kubernetes
+RUN pip install --no-cache-dir kopf kubernetes requests base64 confluent-kafka
 
 # Create working directory
 WORKDIR /app
