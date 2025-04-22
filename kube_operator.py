@@ -156,6 +156,27 @@ def delete_servicealt(spec, name, namespace, logger, **kwargs):
 # Confluent
 logger = logging.getLogger(__name__)
 
+def get_confluent_credentials(namespace='argocd'): #RIDVAN NIKS VERANDERENN!!!!!!!!!!!!!!!!!!!!!!!
+    try:
+        logger.info(f"[Confluent] Loading credentials from namespace '{namespace}'")
+        config.load_incluster_config()
+        v1 = client.CoreV1Api()
+        secret = v1.read_namespaced_secret("confluent-credentials", namespace)
+        api_key = base64.b64decode(secret.data['API_KEY']).decode("utf-8")
+        api_secret = base64.b64decode(secret.data['API_SECRET']).decode("utf-8")
+        logger.info("[Confluent] Credentials loaded successfully")
+        return api_key, api_secret
+    except client.exceptions.ApiException as e:
+        raise RuntimeError(f"[Confluent] Failed to read secret from namespace '{namespace}': {e}")
+    except KeyError as e:
+        raise ValueError(f"[Confluent] Missing key in secret: {e}")
+    except Exception as e:
+        raise RuntimeError(f"[Confluent] Error fetching Confluent credentials: {e}")
+
+
+
+
+
 def get_all_confluent_credentials(namespace='argocd'):
     try:
         logger.info(f"[Confluent] Loading credentials from namespace '{namespace}'")
