@@ -5,6 +5,7 @@ import requests
 import time
 import random
 import traceback
+import json
 from kubernetes import client, config
 
 logging.basicConfig(level=logging.INFO)
@@ -175,20 +176,25 @@ def get_confluent_credentials(namespace='argocd'): #RIDVAN NIKS VERANDERENN!!!!!
     
 def get_topic_credentials(namespace='argocd'):
     try:
-        logger.info(f"[Confluent] Loading topic credentials from namespace '{namespace}'")
-        config.load_incluster_config()
+        logger.info(f"[Confluent] Loading credentials from namespace '{namespace}'")
+        config.load_incluster_config()  # Load Kubernetes config for in-cluster communication
         v1 = client.CoreV1Api()
+        # Ensure you're fetching the correct secret
         secret = v1.read_namespaced_secret("confluent-application-topic-credentials", namespace)
+        
+        # Decode the credentials from the secret
         api_key = base64.b64decode(secret.data['API_KEY']).decode("utf-8")
         api_secret = base64.b64decode(secret.data['API_SECRET']).decode("utf-8")
-        logger.info("[Confluent] Topic credentials loaded successfully")
+        logger.info("[Confluent] Credentials loaded successfully")
+        
         return api_key, api_secret
     except client.exceptions.ApiException as e:
-        raise RuntimeError(f"[Confluent] Failed to read topic secret from namespace '{namespace}': {e}")
+        raise RuntimeError(f"[Confluent] Failed to read secret from namespace '{namespace}': {e}")
     except KeyError as e:
-        raise ValueError(f"[Confluent] Missing key in topic secret: {e}")
+        raise ValueError(f"[Confluent] Missing key in secret: {e}")
     except Exception as e:
-        raise RuntimeError(f"[Confluent] Error fetching topic credentials: {e}")
+        raise RuntimeError(f"[Confluent] Error fetching Confluent credentials: {e}")
+
 
 
 
@@ -281,12 +287,14 @@ def create_confluent_topic(name, partitions, config, api_key, api_secret, cluste
         "Content-Type": "application/json"
     }
 
+    # Prepare topic configuration
     topic_config = []
     if "retentionMs" in config:
         topic_config.append({"name": "retention.ms", "value": str(config["retentionMs"])})
     if "cleanupPolicy" in config:
         topic_config.append({"name": "cleanup.policy", "value": config["cleanupPolicy"]})
 
+    # Construct the payload for the topic creation request
     payload = {
         "topic_name": name,
         "partitions_count": partitions,
@@ -294,7 +302,28 @@ def create_confluent_topic(name, partitions, config, api_key, api_secret, cluste
         "configs": topic_config
     }
 
-    response = requests.post(url, json=payload, auth=(api_key, api_secret), headers=headers)
-    response.raise_for_status()
-    return response.json()
+    # Log the payload for debugging
+    logger.debug(f"[Confluent] Creating topic with payload: {json.dumps(payload)}")
+
+    try:
+        # Make the POST request to create the topic
+        response = requests.post(url, json=payload, auth=(api_key, api_secret), headers=headers)
+        
+        # Log the response status for debugging
+        logger.debug(f"[Confluent] Response Status: {response.status_code}")
+        logger.debug(f"[Confluent] Response Body: {response.text}")
+
+        # Raise an exception for unsuccessful response status
+        response.raise_for_status()
+
+        # Return the response JSON if the request was successful
+        return response.json()
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"[Confluent] Failed to create topic: {e}")
+        # Log the response body in case of an error
+        if response is not None:
+            logger.error(f"[Confluent] Error response: {response.text}")
+        raise  # Reraise the exception so retry logic can handle it
+
 
