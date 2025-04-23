@@ -56,7 +56,7 @@ def create_application_topic(spec, name, namespace, logger, **kwargs):
     rest_endpoint = "https://pkc-z1o60.europe-west1.gcp.confluent.cloud:443"  # <- YOUR REST endpoint (no trailing slash)
 
     def run():
-        api_key, api_secret = get_confluent_credentials(namespace='argocd')
+        api_key, api_secret = get_topic_credentials(namespace='argocd')
         create_confluent_topic(topic_name, partitions, config, api_key, api_secret, cluster_id, rest_endpoint)
         logger.info(f"[Confluent] Kafka topic '{topic_name}' created successfully")
 
@@ -172,6 +172,22 @@ def get_confluent_credentials(namespace='argocd'): #RIDVAN NIKS VERANDERENN!!!!!
         raise ValueError(f"[Confluent] Missing key in secret: {e}")
     except Exception as e:
         raise RuntimeError(f"[Confluent] Error fetching Confluent credentials: {e}")
+def get_topic_credentials(namespace='argocd'):
+    try:
+        logger.info(f"[Confluent] Loading topic credentials from namespace '{namespace}'")
+        config.load_incluster_config()
+        v1 = client.CoreV1Api()
+        secret = v1.read_namespaced_secret("confluent-application-topic-credentials", namespace)
+        api_key = base64.b64decode(secret.data['API_KEY']).decode("utf-8")
+        api_secret = base64.b64decode(secret.data['API_SECRET']).decode("utf-8")
+        logger.info("[Confluent] Topic credentials loaded successfully")
+        return api_key, api_secret
+    except client.exceptions.ApiException as e:
+        raise RuntimeError(f"[Confluent] Failed to read topic secret from namespace '{namespace}': {e}")
+    except KeyError as e:
+        raise ValueError(f"[Confluent] Missing key in topic secret: {e}")
+    except Exception as e:
+        raise RuntimeError(f"[Confluent] Error fetching topic credentials: {e}")
 
 
 
