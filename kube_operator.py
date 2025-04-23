@@ -172,6 +172,7 @@ def get_confluent_credentials(namespace='argocd'): #RIDVAN NIKS VERANDERENN!!!!!
         raise ValueError(f"[Confluent] Missing key in secret: {e}")
     except Exception as e:
         raise RuntimeError(f"[Confluent] Error fetching Confluent credentials: {e}")
+    
 def get_topic_credentials(namespace='argocd'):
     try:
         logger.info(f"[Confluent] Loading topic credentials from namespace '{namespace}'")
