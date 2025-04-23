@@ -4,6 +4,7 @@ import base64
 import requests
 import time
 import random
+import requests
 import traceback
 import json
 from kubernetes import client, config
@@ -57,13 +58,18 @@ def create_application_topic(spec, name, namespace, logger, **kwargs):
     rest_endpoint = "https://pkc-z1o60.europe-west1.gcp.confluent.cloud:443"  # <- YOUR REST endpoint (no trailing slash)
 
     def run():
-        api_key, api_secret = get_topic_credentials(namespace='argocd')
-        create_confluent_topic(topic_name, partitions, config, api_key, api_secret, cluster_id, rest_endpoint)
-        logger.info(f"[Confluent] Kafka topic '{topic_name}' created successfully")
+        try:
+            api_key, api_secret = get_topic_credentials(namespace='argocd')
+            logger.info(f"[Confluent] Retrieved credentials for topic '{topic_name}'")
+            create_confluent_topic(topic_name, partitions, config, api_key, api_secret, cluster_id, rest_endpoint, logger)
+            logger.info(f"[Confluent] Kafka topic '{topic_name}' created successfully")
+        except Exception as e:
+            logger.error(f"[Confluent] Error creating topic '{topic_name}': {e}")
+            raise
 
     retry_with_backoff(run, retry, logger, error_msg="Failed to create Kafka topic")
 
-    return {"message": f"Topic '{topic_name}' created successfully."}
+    return {"message": f"Topic '{topic_name}' creation in progress."}
 
 
 
@@ -174,12 +180,12 @@ def get_confluent_credentials(namespace='argocd'): #RIDVAN NIKS VERANDERENN!!!!!
     except Exception as e:
         raise RuntimeError(f"[Confluent] Error fetching Confluent credentials: {e}")
     
+
 def get_topic_credentials(namespace='argocd'):
     try:
         logger.info(f"[Confluent] Loading credentials from namespace '{namespace}'")
         config.load_incluster_config()  # Load Kubernetes config for in-cluster communication
         v1 = client.CoreV1Api()
-        # Ensure you're fetching the correct secret
         secret = v1.read_namespaced_secret("confluent-application-topic-credentials", namespace)
         
         # Decode the credentials from the secret
@@ -281,7 +287,7 @@ def get_confluent_service_account_by_name(name, api_key, api_secret):
         logger.exception("[Confluent] Unexpected error while retrieving service accounts")
         raise
 
-def create_confluent_topic(name, partitions, config, api_key, api_secret, cluster_id, rest_endpoint):
+def create_confluent_topic(name, partitions, config, api_key, api_secret, cluster_id, rest_endpoint, logger):
     url = f"{rest_endpoint}/kafka/v3/clusters/{cluster_id}/topics"
     headers = {
         "Content-Type": "application/json"
@@ -325,5 +331,20 @@ def create_confluent_topic(name, partitions, config, api_key, api_secret, cluste
         if response is not None:
             logger.error(f"[Confluent] Error response: {response.text}")
         raise  # Reraise the exception so retry logic can handle it
+
+def retry_with_backoff(func, retries, logger, error_msg, backoff_factor=2, max_delay=60):
+    delay = 1  # Starting delay in seconds
+    for attempt in range(retries + 1):
+        try:
+            func()  # Try the function
+            return  # If successful, exit the retry loop
+        except Exception as e:
+            if attempt < retries:
+                logger.warning(f"{error_msg} (attempt {attempt + 1} of {retries}): {e}. Retrying in {delay} seconds...")
+                time.sleep(delay)  # Wait before retrying
+                delay = min(delay * backoff_factor, max_delay)  # Exponential backoff
+            else:
+                logger.error(f"{error_msg} (final attempt failed): {e}")
+                raise  # Raise the last exception if all retries fail
 
 
