@@ -60,7 +60,7 @@ def create_application_topic(spec, name, namespace, logger, **kwargs):
 
     def run():
         try:
-            api_key, api_secret = get_topic_credentials(namespace='argocd')
+            api_key, api_secret = get_confluent_credentials(namespace='argocd')
             logger.info(f"[Confluent] Retrieved credentials for topic '{topic_name}'")
             create_confluent_topic(topic_name, partitions, config, api_key, api_secret, cluster_id, rest_endpoint, logger)
             logger.info(f"[Confluent] Kafka topic '{topic_name}' created successfully")
