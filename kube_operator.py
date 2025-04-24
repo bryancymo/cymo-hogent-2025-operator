@@ -16,7 +16,7 @@ def configure(settings: kopf.OperatorSettings, **_):
     settings.watching.namespaces = ['argocd', 'operator']
 
 # Constants
-MAX_RETRIES = 5
+MAX_RETRIES = 1
 MAX_DELAY = 300  # in seconds
 
 
@@ -179,31 +179,6 @@ def get_confluent_credentials(namespace='argocd'): #RIDVAN NIKS VERANDERENN!!!!!
         raise ValueError(f"[Confluent] Missing key in secret: {e}")
     except Exception as e:
         raise RuntimeError(f"[Confluent] Error fetching Confluent credentials: {e}")
-    
-
-def get_topic_credentials(namespace='argocd'):
-    try:
-        logger.info(f"[Confluent] Loading credentials from namespace '{namespace}'")
-        config.load_incluster_config()  # Load Kubernetes config for in-cluster communication
-        v1 = client.CoreV1Api()
-        secret = v1.read_namespaced_secret("confluent-application-topic-credentials", namespace)
-        
-        # Decode the credentials from the secret
-        api_key = base64.b64decode(secret.data['API_KEY']).decode("utf-8")
-        api_secret = base64.b64decode(secret.data['API_SECRET']).decode("utf-8")
-        logger.info("[Confluent] Credentials loaded successfully")
-        
-        return api_key, api_secret
-    except client.exceptions.ApiException as e:
-        raise RuntimeError(f"[Confluent] Failed to read secret from namespace '{namespace}': {e}")
-    except KeyError as e:
-        raise ValueError(f"[Confluent] Missing key in secret: {e}")
-    except Exception as e:
-        raise RuntimeError(f"[Confluent] Error fetching Confluent credentials: {e}")
-
-
-
-
 
 
 def get_all_confluent_credentials(namespace='argocd'):
@@ -331,20 +306,5 @@ def create_confluent_topic(name, partitions, config, api_key, api_secret, cluste
         if response is not None:
             logger.error(f"[Confluent] Error response: {response.text}")
         raise  # Reraise the exception so retry logic can handle it
-
-def retry_with_backoff(func, retries, logger, error_msg, backoff_factor=2, max_delay=60):
-    delay = 1  # Starting delay in seconds
-    for attempt in range(retries + 1):
-        try:
-            func()  # Try the function
-            return  # If successful, exit the retry loop
-        except Exception as e:
-            if attempt < retries:
-                logger.warning(f"{error_msg} (attempt {attempt + 1} of {retries}): {e}. Retrying in {delay} seconds...")
-                time.sleep(delay)  # Wait before retrying
-                delay = min(delay * backoff_factor, max_delay)  # Exponential backoff
-            else:
-                logger.error(f"{error_msg} (final attempt failed): {e}")
-                raise  # Raise the last exception if all retries fail
 
 
