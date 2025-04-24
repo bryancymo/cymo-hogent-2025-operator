@@ -4,10 +4,11 @@ import base64
 import requests
 import time
 import random
-import requests
 import traceback
 import json
 from kubernetes import client, config
+from kubernetes.client.rest import ApiException
+
 
 logging.basicConfig(level=logging.INFO)
 
@@ -137,14 +138,30 @@ def create_servicealt(spec, name, namespace, logger, **kwargs):
     retry = kwargs.get("retry", 0)
 
     def run():
-        api_key, api_secret = get_confluent_credentials(namespace='argocd')
-        sa_response = create_confluent_service_account(name, "Service account for Servicealt", api_key, api_secret)
-        logger.info(f"Service account created: ID={sa_response['id']} Name={sa_response['display_name']}")
-        return sa_response
+        # Retrieve Confluent operator API
+        mgmt_api_key, mgmt_api_secret = get_confluent_credentials(namespace='argocd')
 
-    retry_with_backoff(run, retry, logger, error_msg="Failed to create service account")
+        # Create service account
+        sa_name = f"operator-hogent-{name}"
+        sa_response = create_confluent_service_account(sa_name, f"Service account for {name}", mgmt_api_key, mgmt_api_secret)
+        sa_id = sa_response['id']
+        logger.info(f"[Confluent] Service account created: ID={sa_id} Name={sa_response['display_name']}")
 
-    return {"message": f"Servicealt '{name}' creation logged, service account created."}
+        # Create API key for the new service account
+        api_key_data = create_confluent_api_key(sa_id, mgmt_api_key, mgmt_api_secret)
+        new_api_key = api_key_data['key']
+        new_api_secret = api_key_data['secret']
+        logger.info(f"[Confluent] API Key created for service account '{name}'")
+
+        # Create Kubernetes Secret to store API credentials
+        secret_name = f"confluent-{sa_name}-credentials"
+        create_k8s_secret(namespace, secret_name, new_api_key, new_api_secret, sa_id)
+
+        return {"service_account_id": sa_id, "secret_name": secret_name}
+
+    result = retry_with_backoff(run, retry, logger, error_msg="Failed to create service account and API key")
+
+    return {"message": f"Servicealt '{name}' created with service account and API key stored in secret '{result['secret_name']}'."}
 
 
 @kopf.on.update('jones.com', 'v1', 'servicealts')
@@ -179,7 +196,73 @@ def get_confluent_credentials(namespace='argocd'): #RIDVAN NIKS VERANDERENN!!!!!
         raise ValueError(f"[Confluent] Missing key in secret: {e}")
     except Exception as e:
         raise RuntimeError(f"[Confluent] Error fetching Confluent credentials: {e}")
+    
+def get_topic_credentials(namespace='argocd'):
+    try:
+        logger.info(f"[Confluent] Loading credentials from namespace '{namespace}'")
+        config.load_incluster_config()  # Load Kubernetes config for in-cluster communication
+        v1 = client.CoreV1Api()
+        secret = v1.read_namespaced_secret("confluent-application-topic-credentials", namespace)
+        
+        # Decode the credentials from the secret
+        api_key = base64.b64decode(secret.data['API_KEY']).decode("utf-8")
+        api_secret = base64.b64decode(secret.data['API_SECRET']).decode("utf-8")
+        logger.info("[Confluent] Credentials loaded successfully")
+        
+        return api_key, api_secret
+    except client.exceptions.ApiException as e:
+        raise RuntimeError(f"[Confluent] Failed to read secret from namespace '{namespace}': {e}")
+    except KeyError as e:
+        raise ValueError(f"[Confluent] Missing key in secret: {e}")
+    except Exception as e:
+        raise RuntimeError(f"[Confluent] Error fetching Confluent credentials: {e}")
 
+def create_k8s_secret(namespace, secret_name, api_key, api_secret, service_account_id):
+    config.load_incluster_config()
+    v1 = client.CoreV1Api()
+
+    secret_data = {
+        "API_KEY": base64.b64encode(api_key.encode("utf-8")).decode("utf-8"),
+        "API_SECRET": base64.b64encode(api_secret.encode("utf-8")).decode("utf-8"),
+        "SERVICE_ACCOUNT_ID": base64.b64encode(service_account_id.encode("utf-8")).decode("utf-8")
+    }
+
+    secret_manifest = client.V1Secret(
+        metadata=client.V1ObjectMeta(name=secret_name, namespace=namespace),
+        data=secret_data,
+        type="Opaque"
+    )
+
+    try:
+        v1.create_namespaced_secret(namespace=namespace, body=secret_manifest)
+        logger.info(f"[K8S] Secret '{secret_name}' created in namespace '{namespace}'")
+    except ApiException as e:
+        if e.status == 409:
+            v1.replace_namespaced_secret(name=secret_name, namespace=namespace, body=secret_manifest)
+            logger.info(f"[K8S] Secret '{secret_name}' updated in namespace '{namespace}'")
+        else:
+            logger.error(f"[K8S] Failed to create/update secret '{secret_name}': {e}")
+            raise
+
+def create_confluent_api_key(service_account_id, api_key, api_secret):
+    url = "https://api.confluent.cloud/iam/v2/api-keys"
+    payload = {
+        "resource": {"id": "all"},  # or specify a resource ID if needed
+        "owner": {"id": service_account_id}
+    }
+
+    logger.info(f"[Confluent] Creating API key for service account ID: {service_account_id}")
+    response = requests.post(url, json=payload, auth=(api_key, api_secret))
+
+    try:
+        response.raise_for_status()
+    except requests.HTTPError as e:
+        logger.error(f"[Confluent] Failed to create API key: {e.response.text}")
+        raise
+
+    data = response.json()
+    logger.info(f"[Confluent] API key created: {data.get('key')}")
+    return data  # Contains both key and secret
 
 def get_all_confluent_credentials(namespace='argocd'):
     try:
@@ -217,7 +300,6 @@ def get_all_confluent_credentials(namespace='argocd'):
         raise RuntimeError(f"[Confluent] Failed to read secrets from namespace '{namespace}': {e}")
     except Exception as e:
         raise RuntimeError(f"[Confluent] Error fetching Confluent credentials: {e}")
-
 
 def create_confluent_service_account(name, description, api_key, api_secret):
     url = "https://api.confluent.cloud/iam/v2/service-accounts"
