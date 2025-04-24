@@ -8,7 +8,7 @@ RUN pip install --no-cache-dir kopf kubernetes requests confluent-kafka
 WORKDIR /app
 
 # Copy your operator code into the image
-COPY kube_operator.py .
+COPY empty.py .
 
 # Run the operator
-CMD ["kopf", "run", "--standalone", "kube_operator.py"]
+CMD ["kopf", "run", "--standalone", "empty.py"]
