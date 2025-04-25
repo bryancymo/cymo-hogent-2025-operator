@@ -200,22 +200,18 @@ def get_confluent_credentials(namespace='argocd'): #RIDVAN NIKS VERANDERENN!!!!!
 def get_topic_credentials(namespace='argocd'):
     try:
         logger.info(f"[Confluent] Loading credentials from namespace '{namespace}'")
-        config.load_incluster_config()  # Load Kubernetes config for in-cluster communication
-        v1 = client.CoreV1Api()
-        secret = v1.read_namespaced_secret("confluent-application-topic-credentials", namespace)
-        
-        # Decode the credentials from the secret
+        config.load_incluster_config()
+        with client.ApiClient() as api:
+            v1 = client.CoreV1Api(api)
+            secret = v1.read_namespaced_secret("confluent-application-topic-credentials", namespace)
+
         api_key = base64.b64decode(secret.data['API_KEY']).decode("utf-8")
         api_secret = base64.b64decode(secret.data['API_SECRET']).decode("utf-8")
         logger.info("[Confluent] Credentials loaded successfully")
-        
+
         return api_key, api_secret
     except client.exceptions.ApiException as e:
-        raise RuntimeError(f"[Confluent] Failed to read secret from namespace '{namespace}': {e}")
-    except KeyError as e:
-        raise ValueError(f"[Confluent] Missing key in secret: {e}")
-    except Exception as e:
-        raise RuntimeError(f"[Confluent] Error fetching Confluent credentials: {e}")
+        raise RuntimeError(f"[Confluent] Failed to read secret: {e}")
 
 def create_k8s_secret(namespace, secret_name, api_key, api_secret, service_account_id):
     config.load_incluster_config()
