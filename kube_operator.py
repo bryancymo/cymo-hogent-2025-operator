@@ -135,33 +135,7 @@ def create_servicealt(spec, name, namespace, logger, **kwargs):
     logger.info(f"[Servicealt] Created: '{name}' in namespace '{namespace}'")
     logger.info(f"ContextLink: {spec.get('contextLink')}, SecretSolution: {spec.get('secretSolution')}")
 
-    retry = kwargs.get("retry", 0)
-
-    def run():
-        # Retrieve Confluent operator API
-        mgmt_api_key, mgmt_api_secret = get_confluent_credentials(namespace='argocd')
-
-        # Create service account
-        sa_name = f"operator-hogent-{name}"
-        sa_response = create_confluent_service_account(sa_name, f"Service account for {name}", mgmt_api_key, mgmt_api_secret)
-        sa_id = sa_response['id']
-        logger.info(f"[Confluent] Service account created: ID={sa_id} Name={sa_response['display_name']}")
-
-        # Create API key for the new service account
-        api_key_data = create_confluent_api_key(sa_id, mgmt_api_key, mgmt_api_secret)
-        new_api_key = api_key_data['key']
-        new_api_secret = api_key_data['secret']
-        logger.info(f"[Confluent] API Key created for service account '{name}'")
-
-        # Create Kubernetes Secret to store API credentials
-        secret_name = f"confluent-{sa_name}-credentials"
-        create_k8s_secret(namespace, secret_name, new_api_key, new_api_secret, sa_id)
-
-        return {"service_account_id": sa_id, "secret_name": secret_name}
-
-    result = retry_with_backoff(run, retry, logger, error_msg="Failed to create service account and API key")
-
-    return {"message": f"Servicealt '{name}' created with service account and API key stored in secret '{result['secret_name']}'."}
+##
 
 
 @kopf.on.update('jones.com', 'v1', 'servicealts')

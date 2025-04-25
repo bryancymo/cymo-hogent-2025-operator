@@ -87,30 +87,51 @@ def create_servicealt(spec, name, namespace, logger, **kwargs):
 
     retry = kwargs.get("retry", 0)
 
-    def run():
-        # Retrieve Confluent operator API
+    # Implement retry delay
+    if retry > 0:
+        delay = 60  # seconds
+        logger.warning(f"[Servicealt] Retry #{retry} - delaying for {delay} seconds to prevent spam.")
+        time.sleep(delay)
+
+    try:
         mgmt_api_key, mgmt_api_secret = get_confluent_credentials(namespace='argocd')
-
-        # Create service account
         sa_name = f"operator-hogent-{name}"
-        sa_response = create_confluent_service_account(sa_name, f"Service account for {name}", mgmt_api_key, mgmt_api_secret)
-        sa_id = sa_response['id']
-        logger.info(f"[Confluent] Service account created: ID={sa_id} Name={sa_response['display_name']}")
 
-        # Create API key for the new service account
-        api_key_data = create_confluent_api_key(sa_id, mgmt_api_key, mgmt_api_secret)
-        new_api_key = api_key_data['key']
-        new_api_secret = api_key_data['secret']
-        logger.info(f"[Confluent] API Key created for service account '{name}'")
+        # Check if service account already exists
+        existing_sa = get_confluent_service_account_by_name(sa_name, mgmt_api_key, mgmt_api_secret)
+        if existing_sa:
+            sa_id = existing_sa['id']
+            logger.info(f"[Confluent] Service account already exists: ID={sa_id}")
+        else:
+            # Create the service account
+            sa_response = create_confluent_service_account(sa_name, f"Service account for {name}", mgmt_api_key, mgmt_api_secret)
+            sa_id = sa_response['id']
+            logger.info(f"[Confluent] Service account created: ID={sa_id}")
 
-        # Create Kubernetes Secret to store API credentials
+        # Check for existing API key
+        existing_keys = get_confluent_api_keys_for_service_account(sa_id, mgmt_api_key, mgmt_api_secret)
+        if existing_keys:
+            api_key_data = existing_keys[0]  # Just use the first one found
+            logger.info(f"[Confluent] Existing API key found for service account: {api_key_data['id']}")
+            new_api_key = api_key_data['key']
+            new_api_secret = "(existing, not retrievable)"
+        else:
+            # Create new API key if none exists
+            api_key_data = create_confluent_api_key(sa_id, mgmt_api_key, mgmt_api_secret)
+            new_api_key = api_key_data['key']
+            new_api_secret = api_key_data['secret']
+            logger.info(f"[Confluent] New API key created for service account.")
+
+        # Create or update Kubernetes secret
         secret_name = f"confluent-{sa_name}-credentials"
         create_k8s_secret(namespace, secret_name, new_api_key, new_api_secret, sa_id)
 
-        return {"service_account_id": sa_id, "secret_name": secret_name}
+        return {"message": f"Servicealt '{name}' processed, credentials stored in secret '{secret_name}'."}
 
-    result = run()
-    return {"message": f"Servicealt '{name}' created with service account and API key stored in secret '{result['secret_name']}'."}
+    except Exception as e:
+        logger.error(f"[Servicealt] Error occurred: {str(e)}\n{traceback.format_exc()}")
+        raise kopf.TemporaryError(f"[Servicealt] Temporary error: {e}", delay=60)  # retry after 60 seconds
+
 
 
 @kopf.on.update('jones.com', 'v1', 'servicealts')
@@ -214,6 +235,8 @@ def create_confluent_service_account(name, description, api_key, api_secret):
     return data
 
 def get_confluent_service_account_by_name(name, api_key, api_secret):
+
+
     logger.info(f"[Confluent] Searching for service account by name: '{name}'")
     url = "https://api.confluent.cloud/iam/v2/service-accounts"
     try:
@@ -236,4 +259,17 @@ def get_confluent_service_account_by_name(name, api_key, api_secret):
         logger.exception("[Confluent] Unexpected error while retrieving service accounts")
         raise
 
-
+def get_confluent_api_keys_for_service_account(service_account_id, api_key, api_secret):
+    url = "https://api.confluent.cloud/iam/v2/api-keys"
+    try:
+        logger.info(f"[Confluent] Fetching API keys for service account ID: {service_account_id}")
+        response = requests.get(url, auth=(api_key, api_secret))
+        response.raise_for_status()
+        keys = response.json().get("data", [])
+        return [key for key in keys if key.get("owner", {}).get("id") == service_account_id]
+    except requests.HTTPError as e:
+        logger.error(f"[Confluent] Failed to get API keys: {e.response.text}")
+        raise
+    except Exception as e:
+        logger.exception("[Confluent] Unexpected error while retrieving API keys")
+        raise
