@@ -43,7 +43,7 @@ def retry_with_backoff(func, retry: int, logger, error_msg="Temporary failure", 
         raise kopf.TemporaryError(f"{error_msg}. Retrying...", delay=delay)
 
 
-# ApplicationTopic
+# ApplicationTopic - Create
 @kopf.on.create('jones.com', 'v1', 'applicationtopics')
 def create_application_topic(spec, name, namespace, logger, **kwargs):
     logger.info(f"[ApplicationTopic] Created: '{name}' in namespace '{namespace}'")
@@ -87,25 +87,55 @@ def delete_application_topic(spec, name, namespace, logger, **kwargs):
     return {"message": f"Topic '{name}' deletion simulated."}
 
 
-# Domaintopic
+# Domaintopic - Create
 @kopf.on.create('jones.com', 'v1', 'domaintopics')
-def create_domaintopic(spec, name, namespace, logger, **kwargs):
+def create_domain_topic(spec, name, namespace, logger, **kwargs):
     logger.info(f"[Domaintopic] Created: '{name}' in namespace '{namespace}'")
-    logger.info(f"Partitions: {spec.get('partitions')}, Config: {spec.get('config')}, Consumers: {spec.get('consumers')}")
-    return {"message": f"Domaintopic '{name}' creation logged."}
+    retry = kwargs.get("retry", 0)
+
+    topic_name = spec.get("name", name)
+    partitions = spec.get("partitions", 3)
+    config = spec.get("config", {})
+
+    # Replace these with your actual values from Confluent Cloud
+    cluster_id = "lkc-n9z7v3"  # <- YOUR cluster ID
+    rest_endpoint = "https://pkc-z1o60.europe-west1.gcp.confluent.cloud:443"  # <- YOUR REST endpoint (no trailing slash)
+
+    def run():
+        try:
+            api_key, api_secret = get_topic_credentials(namespace='argocd')
+            logger.info(f"[Confluent] Retrieved credentials for topic '{topic_name}'")
+            create_confluent_topic(topic_name, partitions, config, api_key, api_secret, cluster_id, rest_endpoint, logger)
+            logger.info(f"[Confluent] Kafka topic '{topic_name}' created successfully")
+        except Exception as e:
+            logger.error(f"[Confluent] Error creating topic '{topic_name}': {e}")
+            raise
+
+    retry_with_backoff(run, retry, logger, error_msg="Failed to create Kafka topic")
+
+    return {"message": f"Domaintopic '{topic_name}' creation in progress."}
 
 
+# Domaintopic - Update
 @kopf.on.update('jones.com', 'v1', 'domaintopics')
-def update_domaintopic(spec, name, namespace, logger, **kwargs):
+def update_domain_topic(spec, name, namespace, logger, **kwargs):
     logger.info(f"[Domaintopic] Updated: '{name}' in namespace '{namespace}'")
     logger.info(f"Partitions: {spec.get('partitions')}, Config: {spec.get('config')}, Consumers: {spec.get('consumers')}")
-    return {"message": f"Domaintopic '{name}' update logged."}
+    
+    # For simplicity, simulate a successful update
+    return {"message": f"Domaintopic '{name}' update simulated."}
 
 
+# Domaintopic - Delete
 @kopf.on.delete('jones.com', 'v1', 'domaintopics')
-def delete_domaintopic(spec, name, namespace, logger, **kwargs):
+def delete_domain_topic(spec, name, namespace, logger, **kwargs):
     logger.info(f"[Domaintopic] Deleted: '{name}' in namespace '{namespace}'")
+    
+    # Optionally, add logic to delete the topic from Confluent Cloud using DELETE request (similar to create logic).
+    # For now, we log the deletion.
+
     return {"message": f"Domaintopic '{name}' deletion logged."}
+
 
 
 # Context

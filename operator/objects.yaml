@@ -80,3 +80,18 @@ spec:
   consumers:
     - service1
     - service2
+---
+apiVersion: jones.com/v1
+kind: Domaintopic
+metadata:
+  name: test-domain
+  namespace: argocd
+spec:
+  config:
+    retentionMs: 3600000      # 1 hour in milliseconds
+    replicationFactor: 3
+    cleanupPolicy: "compact"
+  consumers:
+    - consumer1
+    - consumer2
+  partitions: 3
