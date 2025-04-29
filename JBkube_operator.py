@@ -87,9 +87,9 @@ def create_servicealt(spec, name, namespace, logger, **kwargs):
 
     retry = kwargs.get("retry", 0)
 
-    # Implement retry delay
+    # Retry Logic
     if retry > 0:
-        delay = 60  # seconds
+        delay = 60 
         logger.warning(f"[Servicealt] Retry #{retry} - delaying for {delay} seconds to prevent spam.")
         time.sleep(delay)
 
@@ -97,32 +97,33 @@ def create_servicealt(spec, name, namespace, logger, **kwargs):
         mgmt_api_key, mgmt_api_secret = get_confluent_credentials(namespace='argocd')
         sa_name = f"operator-hogent-{name}"
 
-        # Check if service account already exists
+        # Check if already exists
         existing_sa = get_confluent_service_account_by_name(sa_name, mgmt_api_key, mgmt_api_secret)
         if existing_sa:
             sa_id = existing_sa['id']
             logger.info(f"[Confluent] Service account already exists: ID={sa_id}")
         else:
-            # Create the service account
+            # If not create
             sa_response = create_confluent_service_account(sa_name, f"Service account for {name}", mgmt_api_key, mgmt_api_secret)
             sa_id = sa_response['id']
             logger.info(f"[Confluent] Service account created: ID={sa_id}")
 
-        # Check for existing API key
+        # Check if already existing key
         existing_keys = get_confluent_api_keys_for_service_account(sa_id, mgmt_api_key, mgmt_api_secret)
+        logger.info(f"[Confluent] Checking api key")
         if existing_keys:
-            api_key_data = existing_keys[0]  # Just use the first one found
+            api_key_data = existing_keys[0]
             logger.info(f"[Confluent] Existing API key found for service account: {api_key_data['id']}")
             new_api_key = api_key_data['key']
             new_api_secret = "(existing, not retrievable)"
         else:
-            # Create new API key if none exists
+            # If not create one
             api_key_data = create_confluent_api_key(sa_id, mgmt_api_key, mgmt_api_secret)
             new_api_key = api_key_data['key']
             new_api_secret = api_key_data['secret']
             logger.info(f"[Confluent] New API key created for service account.")
 
-        # Create or update Kubernetes secret
+        # Store in secret
         secret_name = f"confluent-{sa_name}-credentials"
         create_k8s_secret(namespace, secret_name, new_api_key, new_api_secret, sa_id)
 
@@ -130,7 +131,7 @@ def create_servicealt(spec, name, namespace, logger, **kwargs):
 
     except Exception as e:
         logger.error(f"[Servicealt] Error occurred: {str(e)}\n{traceback.format_exc()}")
-        raise kopf.TemporaryError(f"[Servicealt] Temporary error: {e}", delay=60)  # retry after 60 seconds
+        raise kopf.TemporaryError(f"[Servicealt] Temporary error: {e}", delay=60)
 
 
 
