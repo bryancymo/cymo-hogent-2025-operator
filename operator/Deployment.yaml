@@ -25,7 +25,7 @@ spec:
           value: "pkc-z1o60.europe-west1.gcp.confluent.cloud:9092"
         resources:
           requests:
-            cpu: 10m
+            cpu: 50m
             memory: 128Mi
           limits:
             cpu: 200m
