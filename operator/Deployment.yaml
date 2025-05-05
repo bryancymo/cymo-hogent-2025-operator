@@ -15,18 +15,22 @@ spec:
       labels:
         app: kafka-topic-operator
     spec:
-      serviceAccountName: intern-gke-cluster # Ensure this matches the service account
+      serviceAccountName: intern-gke-cluster
       containers:
-      - name: operator
-        image: eu.gcr.io/cymo-hogent-2025-operator/kopf-operator:v01
-        imagePullPolicy: Always
-        env:
-        - name: CONFLUENT_BOOTSTRAP_SERVERS
-          value: "pkc-z1o60.europe-west1.gcp.confluent.cloud:9092"
-        resources:
-          requests:
-            cpu: 50m
-            memory: 128Mi
-          limits:
-            cpu: 200m
-            memory: 256Mi
+        - name: operator
+          image: eu.gcr.io/cymo-hogent-2025-operator/kopf-operator:v01
+          imagePullPolicy: Always
+          args:
+            - run
+            - kube_operator.py       # <- Adjust this path if needed to match your image
+            - --all-namespaces
+          env:
+            - name: CONFLUENT_BOOTSTRAP_SERVERS
+              value: "pkc-z1o60.europe-west1.gcp.confluent.cloud:9092"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi

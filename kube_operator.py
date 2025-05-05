@@ -136,6 +136,10 @@ def delete_domain_topic(spec, name, namespace, logger, **kwargs):
 
     return {"message": f"Domaintopic '{name}' deletion logged."}
 
+#Domaintopic - Event
+@kopf.on.event('jones.com', 'v1', 'domaintopics')
+def debug_event(event, **kwargs):
+    print(f"EVENT: {event['type']} for {event['object']['metadata']['name']}")
 
 
 # Context
@@ -388,5 +392,3 @@ def create_confluent_topic(name, partitions, config, api_key, api_secret, cluste
         if response is not None:
             logger.error(f"[Confluent] Error response: {response.text}")
         raise  # Reraise the exception so retry logic can handle it
-
-
