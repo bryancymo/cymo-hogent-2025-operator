@@ -14,9 +14,11 @@ NAMESPACE_ARGOCD = "argocd"
 NAMESPACE_OPERATOR = "operator"
 CONFLUENT_SECRET_NAME = "confluent-credentials"
 SECRET_TYPE_OPAQUE = "Opaque"
-CONFIG_LOADED = False 
+CONFIG_LOADED = False
 
-logging.basicConfig(level=logging.INFO)
+# Increase logging level to DEBUG
+# Options include: logging.DEBUG, logging.INFO, logging.WARNING, logging.ERROR, logging.CRITICAL
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 @kopf.on.startup()
@@ -26,6 +28,7 @@ def configure(settings: kopf.OperatorSettings, **_):
         try:
             config.load_incluster_config()
             CONFIG_LOADED = True
+            logger.debug("[Startup] Attempting to load Kubernetes configuration.")
             logger.info("[Startup] Kubernetes configuration loaded successfully.")
         except Exception as e:
             logger.error(f"[Startup] Failed to load Kubernetes configuration: {e}")
