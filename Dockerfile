@@ -8,7 +8,7 @@ RUN pip install --no-cache-dir kopf kubernetes requests confluent-kafka
 WORKDIR /app
 
 # Copy your operator code into the image
-COPY JBkube_operator.py .
+COPY JBkube_operatorTEMP.py .
 
 # Run the operator
-CMD ["kopf", "run", "--standalone", "JBkube_operator.py"]
+CMD ["kopf", "run", "--standalone", "JBkube_operatorTEMP.py"]
