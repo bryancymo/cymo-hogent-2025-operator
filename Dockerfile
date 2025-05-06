@@ -11,4 +11,4 @@ WORKDIR /app
 COPY empty_copy.py .
 
 # Run the operator
-CMD ["kopf", "run", "--standalone", "empty_copy.py"]
+CMD ["kopf", "run", "--standalone", "kube_operator.py"]

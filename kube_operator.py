@@ -86,6 +86,11 @@ def delete_application_topic(spec, name, namespace, logger, **kwargs):
     logger.info(f"[ApplicationTopic] Deleted: '{name}' in namespace '{namespace}'")
     return {"message": f"Topic '{name}' deletion simulated."}
 
+#Applicationtopic - Event
+@kopf.on.event('jones.com', 'v1', 'applicationtopics')
+def debug_event(event, **kwargs):
+    print(f"EVENT: {event['type']} for {event['object']['metadata']['name']}")
+
 
 # Domaintopic - Create
 @kopf.on.create('jones.com', 'v1', 'domaintopics')
