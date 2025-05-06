@@ -41,10 +41,27 @@ roleRef:
   kind: ClusterRole
   name: kafka-topic-operator-cluster-role
   apiGroup: rbac.authorization.k8s.io
-
-# IMPORTANT: This RBAC configuration grants permissions *within* the Kubernetes cluster to the
-# 'intern-gke-cluster' Kubernetes service account.
-# It does NOT grant Google Cloud IAM permissions.
-# The Google Cloud IAM permissions are handled separately and are needed to pull images from GCR/Artifact Registry.
-# The google cloud service account 'intern-gke-cluster@cymo-hogent-2025-operator.iam.gserviceaccount.com' needs the correct permissions.
-# Or, the kubernetes service account needs to be correctly mapped to that google cloud service account.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: delete-secrets
+  namespace: argocd
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: bind-delete-secrets
+  namespace: argocd
+subjects:
+  - kind: ServiceAccount
+    name: intern-gke-cluster
+    namespace: argocd
+roleRef:
+  kind: Role
+  name: delete-secrets
+  apiGroup: rbac.authorization.k8s.io
