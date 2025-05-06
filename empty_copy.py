@@ -62,10 +62,25 @@ def delete_application_topic(spec, name, namespace, logger, meta, status, **kwar
             logger.error(f"[ApplicationTopic] Failed to get Confluent credentials: {e}")
             raise kopf.PermanentError(f"Failed to get Confluent credentials: {e}")
 
+        try:
+            delete_confluent_topic(name, mgmt_api_key, mgmt_api_secret)
+            logger.info(f"[ApplicationTopic] Successfully deleted topic '{name}' from Confluent")
+        except TopicNotFoundException:
+            logger.info(f"[ApplicationTopic] Topic '{name}' not found in Confluent - proceeding with resource cleanup")
+        except Exception as e:
+            logger.error(f"[ApplicationTopic] Error deleting topic from Confluent: {e}")
         # Perform cleanup actions here (e.g., delete Kafka topic)
         # Add your topic deletion logic here if needed
 
-        logger.info(f"[ApplicationTopic] Successfully deleted topic '{name}'")
+        # Delete associated resources
+        try:
+            delete_associated_resources(name, namespace)
+            logger.info(f"[ApplicationTopic] Successfully deleted associated resources for '{name}'")
+        except Exception as e:
+            logger.error(f"[ApplicationTopic] Failed to delete associated resources: {e}")
+            raise kopf.PermanentError(f"Failed to delete associated resources: {e}")
+
+        logger.info(f"[ApplicationTopic] Successfully completed deletion process for topic '{name}'")
         return {"message": f"Topic '{name}' and associated resources deleted successfully."}
     except Exception as e:
         logger.error(f"[ApplicationTopic] Error during deletion: {str(e)}\n{traceback.format_exc()}")
@@ -91,21 +106,35 @@ def delete_domain_topic(spec, name, namespace, logger, meta, status, **kwargs):
     try:
         logger.info(f"[Domaintopic] Starting deletion process for: '{name}' in namespace '{namespace}'")
         
-        # Get credentials for cleanup
+        # Get credentials
         try:
             mgmt_api_key, mgmt_api_secret = get_confluent_credentials(namespace=NAMESPACE_ARGOCD)
         except Exception as e:
             logger.error(f"[Domaintopic] Failed to get Confluent credentials: {e}")
             raise kopf.PermanentError(f"Failed to get Confluent credentials: {e}")
 
-        # Perform cleanup actions here (e.g., delete Kafka topic)
-        # Add your topic deletion logic here if needed
+        # Delete topic from Confluent
+        try:
+            delete_confluent_topic(name, mgmt_api_key, mgmt_api_secret)
+            logger.info(f"[DomainTopic] Successfully deleted topic '{name}' from Confluent")
+        except TopicNotFoundException:
+            logger.info(f"[DomainTopic] Topic '{name}' not found in Confluent - proceeding with resource cleanup")
+        except Exception as e:
+            logger.error(f"[DomainTopic] Error deleting topic from Confluent: {e}")
+        # Delete  resources
+        try:
+            delete_associated_resources(name, namespace)
+            logger.info(f"[Domaintopic] Successfully deleted associated resources for '{name}'")
+        except Exception as e:
+            logger.error(f"[Domaintopic] Failed to delete associated resources: {e}")
+            raise kopf.PermanentError(f"Failed to delete associated resources: {e}")
 
-        logger.info(f"[Domaintopic] Successfully deleted topic '{name}'")
+        logger.info(f"[Domaintopic] Successfully completed deletion process for topic '{name}'")
         return {"message": f"Topic '{name}' and associated resources deleted successfully."}
     except Exception as e:
         logger.error(f"[Domaintopic] Error during deletion: {str(e)}\n{traceback.format_exc()}")
         raise kopf.PermanentError(f"Failed to delete Domaintopic: {str(e)}")
+
 
 # Context
 @kopf.on.create('jones.com', 'v1', 'contexts')
@@ -121,42 +150,57 @@ def update_context(spec, name, namespace, logger, **kwargs):
     logger.info(f"Owner: {spec.get('owner')}, Developer Groups: {spec.get('developerGroups')}")
     return {"message": f"Context '{name}' update logged."}
 
-
-@kopf.on.delete('jones.com', 'v1', 'contexts')
-def delete_context(spec, name, namespace, logger, meta, status, **kwargs):
+@kopf.on.delete('jones.com', 'v1', 'servicealts')
+def delete_servicealt(spec, name, namespace, logger, meta, status, **kwargs):
     try:
-        logger.info(f"[Context] Starting deletion process for: '{name}' in namespace '{namespace}'")
+        logger.info(f"[Servicealt] Starting deletion process for: '{name}' in namespace '{namespace}'")
         
-        # Check for any dependent resources before deletion
-        v1_custom = client.CustomObjectsApi()
-        
-        # Check for dependent Servicealt objects
+        # Get credentials for cleanup
         try:
-            servicealt_list = v1_custom.list_namespaced_custom_object(
-                group="jones.com",
-                version="v1",
-                namespace=namespace,
-                plural="servicealts"
-            )
-            
-            dependent_services = [
-                svc['metadata']['name'] for svc in servicealt_list.get('items', [])
-                if svc.get('spec', {}).get('contextLink') == name
-            ]
-            
-            if dependent_services:
-                logger.warning(f"[Context] Found dependent Servicealt objects: {dependent_services}")
-                # Optionally, you could raise an error here if you want to prevent deletion
-                # when there are dependencies
+            mgmt_api_key, mgmt_api_secret = get_confluent_credentials(namespace=NAMESPACE_ARGOCD)
+        except Exception as e:
+            logger.error(f"[Servicealt] Failed to get Confluent credentials: {e}")
+            raise kopf.PermanentError(f"Failed to get Confluent credentials: {e}")
+
+        # 1. Delete the Kubernetes secret
+        secret_name = f"confluent-operator-hogent-{name}-credentials"
+        try:
+            v1 = client.CoreV1Api()
+            v1.delete_namespaced_secret(secret_name, namespace)
+            logger.info(f"[Servicealt] Deleted associated secret '{secret_name}'")
         except ApiException as e:
-            logger.error(f"[Context] Error checking dependent services: {e}")
+            if e.status != 404:  # Ignore if secret doesn't exist
+                logger.warning(f"[Servicealt] Error deleting secret '{secret_name}': {e}")
 
-        logger.info(f"[Context] Successfully deleted context '{name}'")
-        return {"message": f"Context '{name}' deleted successfully."}
+        # 2. Clean up Confluent resources
+        sa_name = f"operator-hogent-{name}"
+        try:
+            # Get the service account
+            existing_sa = get_confluent_service_account_by_name(sa_name, mgmt_api_key, mgmt_api_secret)
+            if existing_sa:
+                sa_id = existing_sa['id']
+                # Delete API keys first
+                try:
+                    delete_confluent_api_keys_for_service_account(sa_id, mgmt_api_key, mgmt_api_secret)
+                    logger.info(f"[Servicealt] Deleted API keys for service account '{sa_name}'")
+                except Exception as e:
+                    logger.error(f"[Servicealt] Error deleting API keys: {e}")
+
+                # Then delete the service account
+                try:
+                    delete_confluent_service_account(sa_id, mgmt_api_key, mgmt_api_secret)
+                    logger.info(f"[Servicealt] Deleted service account '{sa_name}'")
+                except Exception as e:
+                    logger.error(f"[Servicealt] Error deleting service account: {e}")
+            else:
+                logger.info(f"[Servicealt] No service account found for '{sa_name}'")
+        except Exception as e:
+            logger.error(f"[Servicealt] Error during Confluent cleanup: {e}")
+
+        return {"message": f"Servicealt '{name}' and associated resources deleted successfully."}
     except Exception as e:
-        logger.error(f"[Context] Error during deletion: {str(e)}\n{traceback.format_exc()}")
-        raise kopf.PermanentError(f"Failed to delete Context: {str(e)}")
-
+        logger.error(f"[Servicealt] Error during deletion: {str(e)}\n{traceback.format_exc()}")
+        raise kopf.PermanentError(f"Failed to delete Servicealt: {str(e)}")
 
 # Servicealt
 @kopf.on.create('jones.com', 'v1', 'servicealts')
@@ -292,7 +336,7 @@ def delete_servicealt(spec, name, namespace, logger, meta, status, **kwargs):
     try:
         logger.info(f"[Servicealt] Starting deletion process for: '{name}' in namespace '{namespace}'")
         
-        # Get credentials for cleanup
+        # Get credentials
         try:
             mgmt_api_key, mgmt_api_secret = get_confluent_credentials(namespace=NAMESPACE_ARGOCD)
         except Exception as e:
@@ -463,3 +507,30 @@ def delete_confluent_service_account(service_account_id, api_key, api_secret):
         response.raise_for_status()
     except Exception as e:
         raise Exception(f"Failed to delete service account: {str(e)}")
+    
+    pass
+
+def delete_associated_resources(name, namespace):
+    """Delete any associated Kubernetes resources."""
+    v1 = client.CoreV1Api()
+    
+    # Delete configmaps
+    try:
+        config_map_name = f"{name}-config"
+        v1.delete_namespaced_config_map(config_map_name, namespace)
+        logger.info(f"Deleted ConfigMap {config_map_name}")
+    except ApiException as e:
+        if e.status != 404:
+            logger.error(f"Error deleting ConfigMap: {e}")
+
+    # Delete secrets
+    try:
+        secret_name = f"{name}-secret"
+        v1.delete_namespaced_secret(secret_name, namespace)
+        logger.info(f"Deleted Secret {secret_name}")
+    except ApiException as e:
+        if e.status != 404:
+            logger.error(f"Error deleting Secret: {e}")
+
+class TopicNotFoundException(Exception):
+    pass
