@@ -36,20 +36,6 @@ def configure(settings: kopf.OperatorSettings, **_):
     settings.watching.namespaces = [NAMESPACE_ARGOCD, NAMESPACE_OPERATOR]
 
 # ApplicationTopic
-@kopf.on.create('jones.com', 'v1', 'applicationtopics')
-def create_application_topic(spec, name, namespace, logger, **kwargs):
-    logger.info(f"[Applicationtopic] Created: '{name}' in namespace '{namespace}'")
-    logger.info(f"Partitions: {spec.get('partitions')}, Config: {spec.get('config')}, Consumers: {spec.get('consumers')}")
-    return {"message": f"Applicationtopic '{name}' creation logged."}
-
-
-@kopf.on.update('jones.com', 'v1', 'applicationtopics')
-def update_application_topic(spec, name, namespace, logger, **kwargs):
-    logger.info(f"[ApplicationTopic] Updated: '{name}' in namespace '{namespace}'")
-    logger.info(f"Partitions: {spec.get('partitions')}, Config: {spec.get('config')}, Consumers: {spec.get('consumers')}")
-    return {"message": f"Topic '{name}' update simulated."}
-
-
 @kopf.on.delete('jones.com', 'v1', 'applicationtopics')
 def delete_application_topic(spec, name, namespace, logger, meta, status, **kwargs):
     try:
@@ -87,20 +73,6 @@ def delete_application_topic(spec, name, namespace, logger, meta, status, **kwar
         raise kopf.PermanentError(f"Failed to delete ApplicationTopic: {str(e)}")
 
 # Domaintopic
-@kopf.on.create('jones.com', 'v1', 'domaintopics')
-def create_domaintopic(spec, name, namespace, logger, **kwargs):
-    logger.info(f"[Domaintopic] Created: '{name}' in namespace '{namespace}'")
-    logger.info(f"Partitions: {spec.get('partitions')}, Config: {spec.get('config')}, Consumers: {spec.get('consumers')}")
-    return {"message": f"Domaintopic '{name}' creation logged."}
-
-
-@kopf.on.update('jones.com', 'v1', 'domaintopics')
-def update_domaintopic(spec, name, namespace, logger, **kwargs):
-    logger.info(f"[Domaintopic] Updated: '{name}' in namespace '{namespace}'")
-    logger.info(f"Partitions: {spec.get('partitions')}, Config: {spec.get('config')}, Consumers: {spec.get('consumers')}")
-    return {"message": f"Domaintopic '{name}' update logged."}
-
-
 @kopf.on.delete('jones.com', 'v1', 'domaintopics')
 def delete_domain_topic(spec, name, namespace, logger, meta, status, **kwargs):
     try:
