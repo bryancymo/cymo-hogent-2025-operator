@@ -13,3 +13,13 @@ spec:
   consumers:
     - service1
     - service2
+---
+apiVersion: jones.com/v1
+kind: Servicealt
+metadata:
+  name: servicealt-0805
+  namespace: argocd
+spec:
+  name: servicealt-0805
+  contextLink: context-link
+  secretSolution: supersecret

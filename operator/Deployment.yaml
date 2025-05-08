@@ -6,7 +6,7 @@ metadata:
   labels:
     app: kafka-topic-operator
 spec:
-  replicas: 1
+  replicas: 0
   selector:
     matchLabels:
       app: kafka-topic-operator
@@ -39,7 +39,7 @@ metadata:
   labels:
     app: kafka-topic-operator-v2
 spec:
-  replicas: 0
+  replicas: 1
   selector:
     matchLabels:
       app: kafka-topic-operator-v2
@@ -51,7 +51,7 @@ spec:
       serviceAccountName: intern-gke-cluster
       containers:
         - name: operator-v2
-          image: eu.gcr.io/cymo-hogent-2025-operator/kopf-operator:v05
+          image: eu.gcr.io/cymo-hogent-2025-operator/kopf-operator:v06
           imagePullPolicy: Always
           env:
             - name: CONFLUENT_BOOTSTRAP_SERVERS
