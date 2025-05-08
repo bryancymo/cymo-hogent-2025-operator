@@ -331,49 +331,6 @@ def update_servicealt(spec, name, namespace, logger, **kwargs):
     return {"message": f"Servicealt '{name}' update logged."}
 
 
-@kopf.on.delete('jones.com', 'v1', 'servicealts')
-def delete_servicealt(spec, name, namespace, logger, meta, status, **kwargs):
-    try:
-        logger.info(f"[Servicealt] Starting deletion process for: '{name}' in namespace '{namespace}'")
-        
-        # Get credentials
-        try:
-            mgmt_api_key, mgmt_api_secret = get_confluent_credentials(namespace=NAMESPACE_ARGOCD)
-        except Exception as e:
-            logger.error(f"[Servicealt] Failed to get Confluent credentials: {e}")
-            raise kopf.PermanentError(f"Failed to get Confluent credentials: {e}")
-
-        # 1. Delete the Kubernetes secret
-        v1 = client.CoreV1Api()
-        secret_name = f"confluent-operator-hogent-{name}-credentials"
-        try:
-            v1.delete_namespaced_secret(secret_name, namespace)
-            logger.info(f"[Servicealt] Deleted associated secret '{secret_name}'")
-        except ApiException as e:
-            if e.status != 404: 
-                logger.warning(f"[Servicealt] Error deleting secret '{secret_name}': {e}")
-
-        # 2. Delete the Confluent service account if existing
-        sa_name = f"operator-hogent-{name}"
-        try:
-            # First get the service account ID
-            existing_sa = get_confluent_service_account_by_name(sa_name, mgmt_api_key, mgmt_api_secret)
-            if existing_sa:
-                sa_id = existing_sa['id']
-                # Delete the service account's API keys first
-                delete_confluent_api_keys_for_service_account(sa_id, mgmt_api_key, mgmt_api_secret)
-                # Then delete the service account itself
-                delete_confluent_service_account(sa_id, mgmt_api_key, mgmt_api_secret)
-                logger.info(f"[Servicealt] Deleted Confluent service account '{sa_name}' and its API keys")
-        except Exception as e:
-            logger.warning(f"[Servicealt] Error cleaning up Confluent resources: {e}")
-
-        logger.info(f"[Servicealt] Successfully deleted servicealt '{name}' and associated resources")
-        return {"message": f"Servicealt '{name}' and associated resources deleted successfully."}
-    except Exception as e:
-        logger.error(f"[Servicealt] Error during deletion: {str(e)}\n{traceback.format_exc()}")
-        raise kopf.PermanentError(f"Failed to delete Servicealt: {str(e)}")
-
 # Confluent helpers
 def get_confluent_credentials(namespace=NAMESPACE_ARGOCD):
     try:
