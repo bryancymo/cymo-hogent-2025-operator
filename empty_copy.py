@@ -69,8 +69,8 @@ def delete_application_topic(spec, name, namespace, logger, meta, status, **kwar
             logger.info(f"[ApplicationTopic] Topic '{name}' not found in Confluent - proceeding with resource cleanup")
         except Exception as e:
             logger.error(f"[ApplicationTopic] Error deleting topic from Confluent: {e}")
-        # Perform cleanup actions here (e.g., delete Kafka topic)
-        # Add your topic deletion logic here if needed
+        # Perform cleanup logic
+        # Logic soon TM sure sure
 
         # Delete associated resources
         try:
