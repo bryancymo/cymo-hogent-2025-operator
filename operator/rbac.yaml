@@ -17,7 +17,7 @@ rules:
   # Allow access to custom resource definitions in the apiextensions.k8s.io API group
   - apiGroups: ["apiextensions.k8s.io"]
     resources: ["customresourcedefinitions"]
-    verbs: ["get", "list", "watch"]
+    verbs: ["get", "list", "watch", "delete"]
 
   # Grant permissions for standard Kubernetes resources
   - apiGroups: [""]
