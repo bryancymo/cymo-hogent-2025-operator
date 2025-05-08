@@ -72,23 +72,21 @@ def create_applicationtopic(spec, name, namespace, logger, **kwargs):
 
     return {"message": f"Topic '{topic_name}' creation in progress."}
 
-
-
-
 @kopf.on.update('argocd', 'ApplicationTopic')
 def update_application_topic(spec, status, logger, **kwargs):
-    logger.debug(f"Received update event for {spec['name']}. Current status: {status}")
+    logger.debug(f"Received update event for {spec['name']}")
+    logger.debug(f"Spec: {spec}")
+    logger.debug(f"Status: {status}")
+    logger.debug(f"Event Type: {kwargs.get('type', 'None')}")
 
-    if not status or 'status' not in status:
-        logger.debug("No status field to update.")
-        return
-
-    # Proceed with update if required
-    status['status'] = {'update_application_topic': {'message': "Topic update simulated."}}
-    logger.debug(f"Updated status for {spec['name']}: {status}")
-
-    return {'status': status}
-
+    # Proceed with your logic here, if any changes are detected
+    if spec.get('replicationFactor') != status.get('replicationFactor', 0):
+        status['status'] = {'update_application_topic': {'message': "Topic update simulated."}}
+        logger.debug(f"Updated status for {spec['name']}: {status}")
+        return {'status': status}
+    else:
+        logger.debug(f"No update needed for {spec['name']}")
+        return {}
 
 @kopf.on.delete('jones.com', 'v1', 'applicationtopics')
 def delete_application_topic(spec, name, namespace, logger, **kwargs):
