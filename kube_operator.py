@@ -74,10 +74,19 @@ def create_applicationtopic(spec, name, namespace, logger, **kwargs):
 
 
 
-@kopf.on.update('jones.com', 'v1', 'applicationtopics')
-def update_application_topic(spec, name, namespace, logger, **kwargs):
-    logger.info(f"[ApplicationTopic] Updated: '{name}' in namespace '{namespace}'")
-    logger.info(f"Partitions: {spec.get('partitions')}, Config: {spec.get('config')}, Consumers: {spec.get('consumers')}")
+@kopf.on.update('argocd', 'ApplicationTopic')
+def update_application_topic(spec, status, name, logger, **kwargs):
+    # Ensure that the status field is only patched if it exists
+    if 'status' in status:
+        try:
+            logger.info(f"Updating status for {spec['name']}")
+            status['status'] = {'update_application_topic': {'message': "Topic update simulated."}}
+            # Optionally patch the resource
+            return {'status': status}
+        except Exception as e:
+            logger.warning(f"Failed to update status: {str(e)}")
+    else:
+        logger.warning("No status field to update")
     return {"message": f"Topic '{name}' update simulated."}
 
 
