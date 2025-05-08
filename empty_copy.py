@@ -239,7 +239,7 @@ def create_servicealt(spec, name, namespace, logger, meta, **kwargs):
         except ApiException as e:
             if e.status != 404:
                 logger.error(f"[K8S] Failed reading secret '{secret_name}': {e}")
-                kopf.status(meta, status={'state': 'TemporaryError', 'message': f"Failed to read K8s secret '{secret_name}': {e}"})
+                kopf.status.patch(meta, status={'state': 'TemporaryError', 'message': f"Failed to read K8s secret '{secret_name}': {e}"})
                 raise kopf.TemporaryError(f"Failed to read K8s secret '{secret_name}': {e}", delay=60)
 
         # 2. Check if Service Account exists in Confluent by name
@@ -260,7 +260,7 @@ def create_servicealt(spec, name, namespace, logger, meta, **kwargs):
                 logger.warning(f"[Confluent] Existing API key found for service account {sa_id}. Cannot retrieve secret part via API.")
                 if secret_exists_in_k8s:
                     logger.info(f"[K8S] Kubernetes Secret '{secret_name}' exists. Assuming it holds necessary credentials.")
-                    kopf.Status(meta, status={
+                    kopf.status.patch(meta, status={
                         'state': 'Ready',
                         'message': 'Using existing Confluent API key and Kubernetes secret.',
                         'serviceAccountId': sa_id,
@@ -270,7 +270,7 @@ def create_servicealt(spec, name, namespace, logger, meta, **kwargs):
                 else:
                     warning_message = f"Existing API key found for SA {sa_id}, but secret {secret_name} missing. Operator cannot provision credentials."
                     logger.warning(f"[Servicealt] {warning_message}")
-                    kopf.Status(meta, status={
+                    kopf.status.patch(meta, status={
                         'state': 'Warning',
                         'message': warning_message,
                         'serviceAccountId': sa_id
@@ -282,11 +282,11 @@ def create_servicealt(spec, name, namespace, logger, meta, **kwargs):
                 api_key_value = api_key_data['key']
                 api_secret_value = api_key_data['secret']
                 logger.info(f"[Confluent] New API key created.")
-                kopf.status(meta, status={'state': 'Processing', 'message': f'API Key created for SA {sa_id}.'})
+                kopf.status.patch(meta, status={'state': 'Processing', 'message': f'API Key created for SA {sa_id}.'})
                 create_k8s_secret(namespace, secret_name, api_key_value, api_secret_value, sa_id)
                 logger.info(f"[K8S] Secret '{secret_name}' created/updated in namespace '{namespace}'.")
-                kopf.status(meta, status={'state': 'Processing', 'message': f'Secret {secret_name} updated for SA {sa_id}.'})
-                kopf.status(meta, status={
+                kopf.status.patch(meta, status={'state': 'Processing', 'message': f'Secret {secret_name} updated for SA {sa_id}.'})
+                kopf.status.patch(meta, status={
                     'state': 'Ready',
                     'message': 'Confluent Service Account and API Key provisioned; credentials stored in secret.',
                     'serviceAccountId': sa_id,
