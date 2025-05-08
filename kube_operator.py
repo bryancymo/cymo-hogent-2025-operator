@@ -60,7 +60,7 @@ def create_applicationtopic(spec, name, namespace, logger, **kwargs):
 
     def run():
         try:
-            api_key, api_secret = get_topic_credentials(namespace='argocd')
+            api_key, api_secret = get_topic_credentials(logger, namespace='argocd')
             logger.info(f"[Confluent] Retrieved credentials for topic '{topic_name}'")
             create_confluent_topic(topic_name, partitions, config, api_key, api_secret, cluster_id, rest_endpoint, logger)
             logger.info(f"[Confluent] Kafka topic '{topic_name}' created successfully")
@@ -88,8 +88,8 @@ def delete_application_topic(spec, name, namespace, logger, **kwargs):
 
 #Applicationtopic - Event
 @kopf.on.event('jones.com', 'v1', 'applicationtopics')
-def debug_event(event, **kwargs):
-    print(f"EVENT: {event['type']} for {event['object']['metadata']['name']}")
+def debug_event(event, logger, **kwargs):
+    logger.info(f"EVENT: {event['type']} for {event['object']['metadata']['name']}")
 
 
 # Confluent
@@ -112,7 +112,7 @@ def get_confluent_credentials(namespace='argocd'): #RIDVAN NIKS VERANDERENN!!!!!
     except Exception as e:
         raise RuntimeError(f"[Confluent] Error fetching Confluent credentials: {e}")
     
-def get_topic_credentials(namespace='argocd'):
+def get_topic_credentials(logger, namespace='argocd'):
     try:
         logger.info(f"[Confluent] Loading credentials from namespace '{namespace}'")
         config.load_incluster_config()
@@ -126,6 +126,7 @@ def get_topic_credentials(namespace='argocd'):
 
         return api_key, api_secret
     except client.exceptions.ApiException as e:
+        logger.error(f"[Confluent] Failed to read secret: {e}")
         raise RuntimeError(f"[Confluent] Failed to read secret: {e}")
 
 def create_k8s_secret(namespace, secret_name, api_key, api_secret, service_account_id):
@@ -232,29 +233,6 @@ def create_confluent_service_account(name, description, api_key, api_secret):
     logger.info(f"[Confluent] Service account created: ID={data.get('id')} Name={data.get('display_name')}")
     return data
 
-def get_confluent_service_account_by_name(name, api_key, api_secret):
-    logger.info(f"[Confluent] Searching for service account by name: '{name}'")
-    url = "https://api.confluent.cloud/iam/v2/service-accounts"
-    try:
-        response = requests.get(url, auth=(api_key, api_secret))
-        response.raise_for_status()
-        accounts = response.json().get("data", [])
-        logger.debug(f"[Confluent] Retrieved {len(accounts)} service accounts")
-
-        matched = next((acct for acct in accounts if acct.get("display_name") == name), None)
-        if matched:
-            logger.info(f"[Confluent] Found matching service account: ID={matched.get('id')} Name={matched.get('display_name')}")
-        else:
-            logger.warning(f"[Confluent] No matching service account found with name: '{name}'")
-
-        return matched
-    except requests.HTTPError as e:
-        logger.error(f"[Confluent] HTTP error while retrieving service accounts: {e.response.status_code} - {e.response.text}")
-        raise
-    except Exception as e:
-        logger.exception("[Confluent] Unexpected error while retrieving service accounts")
-        raise
-
 def create_confluent_topic(name, partitions, config, api_key, api_secret, cluster_id, rest_endpoint, logger):
     url = f"{rest_endpoint}/kafka/v3/clusters/{cluster_id}/topics"
     headers = {
@@ -279,10 +257,11 @@ def create_confluent_topic(name, partitions, config, api_key, api_secret, cluste
     # Log the payload for debugging
     logger.debug(f"[Confluent] Creating topic with payload: {json.dumps(payload)}")
 
+    response = None  # <-- This line prevents NameError if the request fails early
     try:
         # Make the POST request to create the topic
         response = requests.post(url, json=payload, auth=(api_key, api_secret), headers=headers)
-        
+
         # Log the response status for debugging
         logger.debug(f"[Confluent] Response Status: {response.status_code}")
         logger.debug(f"[Confluent] Response Body: {response.text}")
@@ -295,7 +274,6 @@ def create_confluent_topic(name, partitions, config, api_key, api_secret, cluste
 
     except requests.exceptions.RequestException as e:
         logger.error(f"[Confluent] Failed to create topic: {e}")
-        # Log the response body in case of an error
         if response is not None:
             logger.error(f"[Confluent] Error response: {response.text}")
         raise  # Reraise the exception so retry logic can handle it
