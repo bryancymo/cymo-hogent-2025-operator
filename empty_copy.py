@@ -491,3 +491,19 @@ def delete_associated_resources(name, namespace):
 
 class TopicNotFoundException(Exception):
     pass
+
+def delete_confluent_topic(topic_name, api_key, api_secret):
+    """Delete a topic from Confluent Cloud."""
+    url = f"https://api.confluent.cloud/kafka/v3/clusters/{CLUSTER_ID}/topics/{topic_name}"
+    try:
+        response = requests.delete(url, auth=(api_key, api_secret))
+        if response.status_code == 404:
+            raise TopicNotFoundException(f"Topic '{topic_name}' not found")
+        response.raise_for_status()
+        logger.info(f"[Confluent] Successfully deleted topic '{topic_name}'")
+    except requests.HTTPError as e:
+        if e.response.status_code == 404:
+            raise TopicNotFoundException(f"Topic '{topic_name}' not found")
+        raise Exception(f"Failed to delete topic: {e.response.text}")
+    except Exception as e:
+        raise Exception(f"Error deleting topic: {str(e)}")
