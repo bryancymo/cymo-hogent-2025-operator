@@ -20,6 +20,13 @@ spec:
         - name: operator
           image: eu.gcr.io/cymo-hogent-2025-operator/kopf-operator:v04
           imagePullPolicy: Always
+<<<<<<< HEAD
+=======
+          # args:
+          #   - run
+          #   - kube_operator.py       # <- Adjust this path if needed to match your image
+          #   - --all-namespace
+>>>>>>> 14727370379fb225be995f2da080a6619ac71b59
           env:
             - name: CONFLUENT_BOOTSTRAP_SERVERS
               value: "pkc-z1o60.europe-west1.gcp.confluent.cloud:9092"
