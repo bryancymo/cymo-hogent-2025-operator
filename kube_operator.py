@@ -74,20 +74,20 @@ def create_applicationtopic(spec, name, namespace, logger, **kwargs):
 
 
 
+
 @kopf.on.update('argocd', 'ApplicationTopic')
-def update_application_topic(spec, status, name, logger, **kwargs):
-    # Ensure that the status field is only patched if it exists
-    if 'status' in status:
-        try:
-            logger.info(f"Updating status for {spec['name']}")
-            status['status'] = {'update_application_topic': {'message': "Topic update simulated."}}
-            # Optionally patch the resource
-            return {'status': status}
-        except Exception as e:
-            logger.warning(f"Failed to update status: {str(e)}")
-    else:
-        logger.warning("No status field to update")
-    return {"message": f"Topic '{name}' update simulated."}
+def update_application_topic(spec, status, logger, **kwargs):
+    logger.debug(f"Received update event for {spec['name']}. Current status: {status}")
+
+    if not status or 'status' not in status:
+        logger.debug("No status field to update.")
+        return
+
+    # Proceed with update if required
+    status['status'] = {'update_application_topic': {'message': "Topic update simulated."}}
+    logger.debug(f"Updated status for {spec['name']}: {status}")
+
+    return {'status': status}
 
 
 @kopf.on.delete('jones.com', 'v1', 'applicationtopics')
