@@ -11,4 +11,5 @@ WORKDIR /app
 COPY kube_operator.py .
 
 # Run the operator
-CMD ["kopf", "run", "--standalone", "kube_operator.py"]
+CMD ["kopf", "run", "--standalone", "--namespace=argocd", "kube_operator.py"]
+
