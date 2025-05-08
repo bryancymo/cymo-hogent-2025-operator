@@ -18,7 +18,7 @@ spec:
       serviceAccountName: intern-gke-cluster
       containers:
         - name: operator
-          image: eu.gcr.io/cymo-hogent-2025-operator/kopf-operator:v04
+          image: eu.gcr.io/cymo-hogent-2025-operator/kopf-operator:latest
           imagePullPolicy: Always
           env:
             - name: CONFLUENT_BOOTSTRAP_SERVERS
