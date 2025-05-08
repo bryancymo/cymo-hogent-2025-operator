@@ -45,7 +45,7 @@ def retry_with_backoff(func, retry: int, logger, error_msg="Temporary failure", 
 
 # ApplicationTopic - Create
 @kopf.on.create('jones.com', 'v1', 'applicationtopics')
-def create_application_topic(spec, name, namespace, logger, **kwargs):
+def create_applicationtopic(spec, name, namespace, logger, **kwargs):
     logger.info(f"[ApplicationTopic] Created: '{name}' in namespace '{namespace}'")
     retry = kwargs.get("retry", 0)
 
@@ -90,104 +90,6 @@ def delete_application_topic(spec, name, namespace, logger, **kwargs):
 @kopf.on.event('jones.com', 'v1', 'applicationtopics')
 def debug_event(event, **kwargs):
     print(f"EVENT: {event['type']} for {event['object']['metadata']['name']}")
-
-
-# Domaintopic - Create
-@kopf.on.create('jones.com', 'v1', 'domaintopics')
-def create_domain_topic(spec, name, namespace, logger, **kwargs):
-    logger.info(f"[Domaintopic] Created: '{name}' in namespace '{namespace}'")
-    retry = kwargs.get("retry", 0)
-
-    topic_name = spec.get("name", name)
-    partitions = spec.get("partitions", 3)
-    config = spec.get("config", {})
-
-    # Replace these with your actual values from Confluent Cloud
-    cluster_id = "lkc-n9z7v3"  # <- YOUR cluster ID
-    rest_endpoint = "https://pkc-z1o60.europe-west1.gcp.confluent.cloud:443"  # <- YOUR REST endpoint (no trailing slash)
-
-    def run():
-        try:
-            api_key, api_secret = get_topic_credentials(namespace='argocd')
-            logger.info(f"[Confluent] Retrieved credentials for topic '{topic_name}'")
-            create_confluent_topic(topic_name, partitions, config, api_key, api_secret, cluster_id, rest_endpoint, logger)
-            logger.info(f"[Confluent] Kafka topic '{topic_name}' created successfully")
-        except Exception as e:
-            logger.error(f"[Confluent] Error creating topic '{topic_name}': {e}")
-            raise
-
-    retry_with_backoff(run, retry, logger, error_msg="Failed to create Kafka topic")
-
-    return {"message": f"Domaintopic '{topic_name}' creation in progress."}
-
-
-# Domaintopic - Update
-@kopf.on.update('jones.com', 'v1', 'domaintopics')
-def update_domain_topic(spec, name, namespace, logger, **kwargs):
-    logger.info(f"[Domaintopic] Updated: '{name}' in namespace '{namespace}'")
-    logger.info(f"Partitions: {spec.get('partitions')}, Config: {spec.get('config')}, Consumers: {spec.get('consumers')}")
-    
-    # For simplicity, simulate a successful update
-    return {"message": f"Domaintopic '{name}' update simulated."}
-
-
-# Domaintopic - Delete
-@kopf.on.delete('jones.com', 'v1', 'domaintopics')
-def delete_domain_topic(spec, name, namespace, logger, **kwargs):
-    logger.info(f"[Domaintopic] Deleted: '{name}' in namespace '{namespace}'")
-    
-    # Optionally, add logic to delete the topic from Confluent Cloud using DELETE request (similar to create logic).
-    # For now, we log the deletion.
-
-    return {"message": f"Domaintopic '{name}' deletion logged."}
-
-#Domaintopic - Event
-@kopf.on.event('jones.com', 'v1', 'domaintopics')
-def debug_event(event, **kwargs):
-    print(f"EVENT: {event['type']} for {event['object']['metadata']['name']}")
-
-
-# Context
-@kopf.on.create('jones.com', 'v1', 'contexts')
-def create_context(spec, name, namespace, logger, **kwargs):
-    logger.info(f"[Context] Created: '{name}' in namespace '{namespace}'")
-    logger.info(f"Owner: {spec.get('owner')}, Developer Groups: {spec.get('developerGroups')}")
-    return {"message": f"Context '{name}' creation logged."}
-
-
-@kopf.on.update('jones.com', 'v1', 'contexts')
-def update_context(spec, name, namespace, logger, **kwargs):
-    logger.info(f"[Context] Updated: '{name}' in namespace '{namespace}'")
-    logger.info(f"Owner: {spec.get('owner')}, Developer Groups: {spec.get('developerGroups')}")
-    return {"message": f"Context '{name}' update logged."}
-
-
-@kopf.on.delete('jones.com', 'v1', 'contexts')
-def delete_context(spec, name, namespace, logger, **kwargs):
-    logger.info(f"[Context] Deleted: '{name}' in namespace '{namespace}'")
-    return {"message": f"Context '{name}' deletion logged."}
-
-
-# Servicealt
-@kopf.on.create('jones.com', 'v1', 'servicealts')
-def create_servicealt(spec, name, namespace, logger, **kwargs):
-    logger.info(f"[Servicealt] Created: '{name}' in namespace '{namespace}'")
-    logger.info(f"ContextLink: {spec.get('contextLink')}, SecretSolution: {spec.get('secretSolution')}")
-
-##
-
-
-@kopf.on.update('jones.com', 'v1', 'servicealts')
-def update_servicealt(spec, name, namespace, logger, **kwargs):
-    logger.info(f"[Servicealt] Updated: '{name}' in namespace '{namespace}'")
-    logger.info(f"ContextLink: {spec.get('contextLink')}, SecretSolution: {spec.get('secretSolution')}")
-    return {"message": f"Servicealt '{name}' update logged."}
-
-
-@kopf.on.delete('jones.com', 'v1', 'servicealts')
-def delete_servicealt(spec, name, namespace, logger, **kwargs):
-    logger.info(f"[Servicealt] Deleted: '{name}' in namespace '{namespace}'")
-    return {"message": f"Servicealt '{name}' deletion logged."}
 
 
 # Confluent
