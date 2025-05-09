@@ -369,10 +369,12 @@ def create_k8s_secret(namespace, secret_name, api_key, api_secret, service_accou
 def create_confluent_api_key(service_account_id, api_key, api_secret):
     url = "https://api.confluent.cloud/iam/v2/api-keys"
     payload = {
-        "resource": {"id": "all"},
-        "owner": {"id": service_account_id}
+        "spec": {
+            "owner": {"id": service_account_id},
+            "resource": {"id": "lkc-n9z7v3", "type": "kafka-cluster"}
+        }
     }
-    logger.info(f"[Confluent] Creating API key for service account ID: {service_account_id}")
+    logger.info(f"[Confluent] Creating API key for service account ID: {service_account_id} and cluster ID: lkc-n9z7v3")
     response = requests.post(url, json=payload, auth=(api_key, api_secret))
     try:
         response.raise_for_status()
@@ -380,8 +382,12 @@ def create_confluent_api_key(service_account_id, api_key, api_secret):
         logger.error(f"[Confluent] Failed to create API key: {e.response.text}")
         raise
     data = response.json()
+    logger.debug(f"[Confluent] Full API response: {data}")
+    if 'key' not in data:
+        logger.error("[Confluent] API response does not contain 'key'.")
+        raise KeyError("API response does not contain 'key'.")
     logger.info(f"[Confluent] API key created, key: {data.get('key')}")
-    return data 
+    return data
 
 def create_confluent_service_account(name, description, api_key, api_secret):
     url = "https://api.confluent.cloud/iam/v2/service-accounts"
