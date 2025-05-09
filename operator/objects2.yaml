@@ -9,7 +9,7 @@ spec:
   config:
     retentionMs: 604800000  # 7 days in milliseconds
     cleanupPolicy: "delete"
-    replicationFactor: 3
+    replicationFactor: 1
   consumers: []
 ---
 apiVersion: jones.com/v1
@@ -23,5 +23,5 @@ spec:
   config:
     retentionMs: 604800000  # 7 days in milliseconds
     cleanupPolicy: "delete"
-    replicationFactor: 3
+    replicationFactor: 1
   consumers: [] 
