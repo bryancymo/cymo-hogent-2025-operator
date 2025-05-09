@@ -45,7 +45,7 @@ def retry_with_backoff(func, retry: int, logger, error_msg="Temporary failure", 
 
 
 # ApplicationTopic - Create
-def check_application_topic(topic_name, api_key, api_secret, cluster_id, rest_endpoint):
+def check_application_topic(topic_name, api_key, api_secret, cluster_id, rest_endpoint, logger):
     url = f"{rest_endpoint}/kafka/v3/clusters/{cluster_id}/topics/{topic_name}"
     headers = {"Content-Type": "application/json"}
     
