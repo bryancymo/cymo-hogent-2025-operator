@@ -44,6 +44,25 @@ def retry_with_backoff(func, retry: int, logger, error_msg="Temporary failure", 
 
 
 # ApplicationTopic - Create
+def check_application_topic(topic_name, api_key, api_secret, cluster_id, rest_endpoint, logger):
+    url = f"{rest_endpoint}/kafka/v3/clusters/{cluster_id}/topics/{topic_name}"
+    headers = {"Content-Type": "application/json"}
+    
+    try:
+        response = requests.get(url, auth=(api_key, api_secret), headers=headers)
+        if response.status_code == 200:
+            logger.info(f"[Confluent] Topic '{topic_name}' already exists")
+            return True
+        elif response.status_code == 404:
+            logger.info(f"[Confluent] Topic '{topic_name}' does not exist")
+            return False
+        else:
+            logger.error(f"[Confluent] Unexpected response checking topic: {response.status_code}")
+            return False
+    except Exception as e:
+        logger.error(f"[Confluent] Error checking topic existence: {e}")
+        return False
+
 @kopf.on.create('jones.com', 'v1', 'applicationtopics')
 def create_applicationtopic(spec, name, namespace, logger, **kwargs):
     logger.info(f"[ApplicationTopic] Created: '{name}' in namespace '{namespace}'")
@@ -61,6 +80,12 @@ def create_applicationtopic(spec, name, namespace, logger, **kwargs):
         try:
             api_key, api_secret = get_topic_credentials(logger, namespace='argocd')
             logger.info(f"[Confluent] Retrieved credentials for topic '{topic_name}'")
+            
+            # Check if topic already exists
+            if check_application_topic(topic_name, api_key, api_secret, cluster_id, rest_endpoint, logger):
+                logger.info(f"[Confluent] Topic '{topic_name}' already exists, skipping creation")
+                return
+            
             create_confluent_topic(topic_name, partitions, config, api_key, api_secret, cluster_id, rest_endpoint, logger)
             logger.info(f"[Confluent] Kafka topic '{topic_name}' created successfully")
         except Exception as e:
