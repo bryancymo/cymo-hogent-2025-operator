@@ -99,7 +99,7 @@ def create_applicationtopic(spec, name, namespace, **kwargs):
     return {"message": f"Topic '{topic_name}' creation in progress."}
 
 @kopf.on.update('argocd', 'ApplicationTopic')
-def update_application_topic(spec, status, logger, **kwargs):
+def update_application_topic(spec, status, **kwargs):
     logger.debug(f"Received update event for {spec['name']}")
     logger.debug(f"Spec: {spec}")
     logger.debug(f"Status: {status}")
@@ -115,19 +115,19 @@ def update_application_topic(spec, status, logger, **kwargs):
         return {}
 
 @kopf.on.delete('jones.com', 'v1', 'applicationtopics')
-def delete_application_topic(spec, name, namespace, logger, **kwargs):
+def delete_application_topic(spec, name, namespace, **kwargs):
     logger.info(f"[ApplicationTopic] Deleted: '{name}' in namespace '{namespace}'")
     return {"message": f"Topic '{name}' deletion simulated."}
 
 #Applicationtopic - Event
 @kopf.on.event('jones.com', 'v1', 'applicationtopics')
-def debug_event(event, logger, **kwargs):
+def debug_event(event, **kwargs):
     logger.info(f"EVENT: {event['type']} for {event['object']['metadata']['name']}")
 
 
 # Domaintopic
 @kopf.on.create('jones.com', 'v1', 'domaintopics')
-def create_domaintopic(spec, name, namespace, logger, **kwargs):
+def create_domaintopic(spec, name, namespace, **kwargs):
     logger.info(f"[Domaintopic] Created: '{name}' in namespace '{namespace}'")
     retry = kwargs.get("retry", 0)
 
@@ -161,7 +161,7 @@ def create_domaintopic(spec, name, namespace, logger, **kwargs):
 
 
 @kopf.on.update('jones.com', 'v1', 'domaintopics')
-def update_domaintopic(spec, status, logger, **kwargs):
+def update_domaintopic(spec, status, **kwargs):
     logger.debug(f"Received update event for {spec['name']}")
     logger.debug(f"Spec: {spec}")
     logger.debug(f"Status: {status}")
@@ -178,13 +178,11 @@ def update_domaintopic(spec, status, logger, **kwargs):
 
 
 @kopf.on.delete('jones.com', 'v1', 'domaintopics')
-def delete_domaintopic(spec, name, namespace, logger, **kwargs):
+def delete_domaintopic(spec, name, namespace, **kwargs):
     logger.info(f"[Domaintopic] Deleted: '{name}' in namespace '{namespace}'")
     return {"message": f"Topic '{name}' deletion simulated."}
 
 # Confluent
-logger = logging.getLogger(__name__)
-
 def get_confluent_credentials(namespace='argocd'): #RIDVAN NIKS VERANDERENN!!!!!!!!!!!!!!!!!!!!!!!
     try:
         logger.info(f"[Confluent] Loading credentials from namespace '{namespace}'")
