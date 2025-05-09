@@ -1,35 +1,35 @@
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: kafka-topic-operator
-  namespace: argocd
-  labels:
-    app: kafka-topic-operator
-spec:
-  replicas: 0
-  selector:
-    matchLabels:
-      app: kafka-topic-operator
-  template:
-    metadata:
-      labels:
-        app: kafka-topic-operator
-    spec:
-      serviceAccountName: intern-gke-cluster
-      containers:
-        - name: operator
-          image: eu.gcr.io/cymo-hogent-2025-operator/kopf-operator:latest
-          imagePullPolicy: Always
-          env:
-            - name: CONFLUENT_BOOTSTRAP_SERVERS
-              value: "pkc-z1o60.europe-west1.gcp.confluent.cloud:9092"
-          resources:
-            requests:
-              cpu: 50m
-              memory: 128Mi
-            limits:
-              cpu: 200m
-              memory: 256Mi
+# apiVersion: apps/v1
+# kind: Deployment
+# metadata:
+#   name: kafka-topic-operator
+#   namespace: argocd
+#   labels:
+#     app: kafka-topic-operator
+# spec:
+#   replicas: 0
+#   selector:
+#     matchLabels:
+#       app: kafka-topic-operator
+#   template:
+#     metadata:
+#       labels:
+#         app: kafka-topic-operator
+#     spec:
+#       serviceAccountName: intern-gke-cluster
+#       containers:
+#         - name: operator
+#           image: eu.gcr.io/cymo-hogent-2025-operator/kopf-operator:latest
+#           imagePullPolicy: Always
+#           env:
+#             - name: CONFLUENT_BOOTSTRAP_SERVERS
+#               value: "pkc-z1o60.europe-west1.gcp.confluent.cloud:9092"
+#           resources:
+#             requests:
+#               cpu: 50m
+#               memory: 128Mi
+#             limits:
+#               cpu: 200m
+#               memory: 256Mi
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -39,7 +39,7 @@ metadata:
   labels:
     app: kafka-topic-operator-v2
 spec:
-  replicas: 0
+  replicas: 1
   selector:
     matchLabels:
       app: kafka-topic-operator-v2
@@ -51,7 +51,7 @@ spec:
       serviceAccountName: intern-gke-cluster
       containers:
         - name: operator-v2
-          image: eu.gcr.io/cymo-hogent-2025-operator/kopf-operator:v06
+          image: eu.gcr.io/cymo-hogent-2025-operator/kopf-operator:v09
           imagePullPolicy: Always
           env:
             - name: CONFLUENT_BOOTSTRAP_SERVERS

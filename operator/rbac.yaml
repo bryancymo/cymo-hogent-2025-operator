@@ -21,7 +21,7 @@ rules:
 
   # Grant permissions for standard Kubernetes resources
   - apiGroups: [""]
-    resources: ["pods", "services", "endpoints", "configmaps", "secrets"]
+    resources: ["pods", "services", "endpoints", "configmaps", "secrets", "namespaces"]
     verbs: ["get", "list", "watch"]
 
   # Allow Kopf to create events in any namespace
@@ -29,10 +29,6 @@ rules:
     resources: ["events"]
     verbs: ["create"]
 
-  # Allow Kopf to list namespaces at cluster scope
-  - apiGroups: [""]
-    resources: ["namespaces"]
-    verbs: ["get", "list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
