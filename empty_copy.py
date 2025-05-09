@@ -185,7 +185,7 @@ def create_servicealt(spec, name, namespace, logger, meta, **kwargs):
             # 3. Check if API Key exists for this Service Account in Confluent
             existing_keys = get_confluent_api_keys_for_service_account(sa_id, cluster_id, mgmt_api_key, mgmt_api_secret)
             if existing_keys:
-                api_key_value = existing_keys[0]['key']
+                api_key_value = existing_keys[0]['id']
                 logger.warning(f"[Confluent] Existing API key found for service account {sa_id}. Cannot retrieve secret part via API.")
                 if secret_exists_in_k8s:
                     logger.info(f"[K8S] Kubernetes Secret '{secret_name}' exists. Assuming it holds necessary credentials.")
@@ -204,8 +204,8 @@ def create_servicealt(spec, name, namespace, logger, meta, **kwargs):
             else:
                 logger.info(f"[Confluent] No existing API keys for service account {sa_id}. Creating a new one.")
                 api_key_data = create_confluent_api_key(sa_id, sa_name, mgmt_api_key, mgmt_api_secret)
-                api_key_value = api_key_data['key']
-                api_secret_value = api_key_data['secret']
+                api_key_value = api_key_data['id']
+                api_secret_value = api_key_data['spec']['secret']
                 logger.info(f"[Confluent] New API key created.")
                 status.state = 'Processing'
                 status.message = f'API Key created for SA {sa_id}.'
@@ -245,8 +245,8 @@ def create_servicealt(spec, name, namespace, logger, meta, **kwargs):
                     raise
 
             api_key_data = create_confluent_api_key(sa_id, sa_name, mgmt_api_key, mgmt_api_secret)
-            api_key_value = api_key_data['key']
-            api_secret_value = api_key_data['secret']
+            api_key_value = api_key_data['id']
+            api_secret_value = api_key_data['spec']['secret']
             logger.info(f"[Confluent] New API key created for new service account.")
             status.state = 'Processing'
             status.message = f'API Key created for SA {sa_id}.'
