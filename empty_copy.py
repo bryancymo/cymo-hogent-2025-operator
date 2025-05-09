@@ -202,7 +202,7 @@ def create_servicealt(spec, name, namespace, logger, meta, **kwargs):
                     return {"message": f"Servicealt '{name}' processed. Existing API key found, but K8s secret '{secret_name}' missing."}
             else:
                 logger.info(f"[Confluent] No existing API keys for service account {sa_id}. Creating a new one.")
-                api_key_data = create_confluent_api_key(sa_id, mgmt_api_key, mgmt_api_secret)
+                api_key_data = create_confluent_api_key(sa_id, sa_name, mgmt_api_key, mgmt_api_secret)
                 api_key_value = api_key_data['key']
                 api_secret_value = api_key_data['secret']
                 logger.info(f"[Confluent] New API key created.")
@@ -243,7 +243,7 @@ def create_servicealt(spec, name, namespace, logger, meta, **kwargs):
                 else:
                     raise
 
-            api_key_data = create_confluent_api_key(sa_id, mgmt_api_key, mgmt_api_secret)
+            api_key_data = create_confluent_api_key(sa_id, sa_name, mgmt_api_key, mgmt_api_secret)
             api_key_value = api_key_data['key']
             api_secret_value = api_key_data['secret']
             logger.info(f"[Confluent] New API key created for new service account.")
@@ -366,10 +366,12 @@ def create_k8s_secret(namespace, secret_name, api_key, api_secret, service_accou
             logger.error(f"[K8S] Failed to create/update secret '{secret_name}': {e}")
             raise
 
-def create_confluent_api_key(service_account_id, api_key, api_secret):
+def create_confluent_api_key(service_account_id, service_account_name, api_key, api_secret):
     url = "https://api.confluent.cloud/iam/v2/api-keys"
     payload = {
         "spec": {
+            "display_name": f"API Key for {service_account_name}",
+            "description": "Empty",
             "owner": {"id": service_account_id},
             "resource": {"id": "lkc-n9z7v3", "type": "kafka-cluster"}
         }
@@ -382,12 +384,17 @@ def create_confluent_api_key(service_account_id, api_key, api_secret):
         logger.error(f"[Confluent] Failed to create API key: {e.response.text}")
         raise
     data = response.json()
-    logger.debug(f"[Confluent] Full API response: {data}")  # This logs the full response
-    if 'key' not in data:
-        logger.error("[Confluent] API response does not contain 'key'.")
-        raise KeyError("API response does not contain 'key'.")
-    logger.info(f"[Confluent] API key created, key: {data.get('key')}")
-    return data
+    logger.debug(f"[Confluent] Full API response: {data}")
+    
+    # Check for 'id' and 'spec.secret' in the response
+    if 'id' not in data or 'spec' not in data or 'secret' not in data['spec']:
+        logger.error(f"[Confluent] API response does not contain expected fields. Full response: {data}")
+        raise KeyError("API response does not contain expected fields.")
+    
+    api_key_id = data['id']
+    api_key_secret = data['spec']['secret']
+    logger.info(f"[Confluent] API key created, ID: {api_key_id}, Secret: {api_key_secret}")
+    return {"id": api_key_id, "secret": api_key_secret}
 
 def create_confluent_service_account(name, description, api_key, api_secret):
     url = "https://api.confluent.cloud/iam/v2/service-accounts"
@@ -407,30 +414,31 @@ def create_confluent_service_account(name, description, api_key, api_secret):
     return data
 
 def get_confluent_service_account_by_name(name, api_key, api_secret):
-    logger.info(f"[Confluent] Searching for service account by name: '{name}'")
     url = "https://api.confluent.cloud/iam/v2/service-accounts"
     params = {
-        "filter": f"display_name={name}"  # Search By Name
+        "display_name": name  # Search By Name
     }
     try:
         response = requests.get(url, auth=(api_key, api_secret), params=params)
         response.raise_for_status()
         accounts = response.json().get("data", [])
         logger.debug(f"[Confluent] Retrieved {len(accounts)} service accounts")
+        logger.debug(f"[Confluent] Full response: {response.json()}")
+        logger.debug(f"[Confluent] Filter used: {params}")
         
         # Should only get 1 result right???
         matched = accounts[0] if accounts else None
         if matched:
+            if matched.get('display_name') != name:
+                logger.warning(f"[Confluent] Found service account with different name: expected '{name}', got '{matched.get('display_name')}'")
+                return None
             logger.info(f"[Confluent] Found matching service account: ID={matched.get('id')}")
         else:
             logger.warning(f"[Confluent] No matching service account found for: '{name}'")
         return matched
-    except requests.HTTPError as e:
-        logger.error(f"[Confluent] HTTP error retrieving service accounts: {e.response.status_code} - {e.response.text}")
-        raise
     except Exception as e:
-        logger.exception("[Confluent] Unexpected error retrieving service accounts")
-        raise
+        logger.error(f"[Confluent] Error retrieving service account: {e}")
+        return None
 
 def get_confluent_api_keys_for_service_account(service_account_id, api_key, api_secret):
     url = "https://api.confluent.cloud/iam/v2/api-keys"
