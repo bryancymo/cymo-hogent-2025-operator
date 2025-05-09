@@ -45,8 +45,8 @@ def retry_with_backoff(func, retry: int, logger, error_msg="Temporary failure", 
         raise kopf.TemporaryError(f"{error_msg}. Retrying...", delay=delay)
 
 
-# ApplicationTopic - Create
-def check_application_topic(topic_name, api_key, api_secret, cluster_id, rest_endpoint, logger):
+# Universal topic check function
+def check_topic_exists(topic_name, api_key, api_secret, cluster_id, rest_endpoint, logger):
     url = f"{rest_endpoint}/kafka/v3/clusters/{cluster_id}/topics/{topic_name}"
     headers = {"Content-Type": "application/json"}
     
@@ -66,7 +66,7 @@ def check_application_topic(topic_name, api_key, api_secret, cluster_id, rest_en
         return False
 
 @kopf.on.create('jones.com', 'v1', 'applicationtopics')
-def create_applicationtopic(spec, name, namespace, **kwargs):
+def create_applicationtopic(spec, name, namespace, status, **kwargs):
     logger.info(f"[ApplicationTopic] Created: '{name}' in namespace '{namespace}'")
     retry = kwargs.get("retry", 0)
 
@@ -84,19 +84,22 @@ def create_applicationtopic(spec, name, namespace, **kwargs):
             logger.info(f"[Confluent] Retrieved credentials for topic '{topic_name}'")
             
             # Check if topic already exists
-            if check_application_topic(topic_name, api_key, api_secret, cluster_id, rest_endpoint, logger):
+            if check_topic_exists(topic_name, api_key, api_secret, cluster_id, rest_endpoint, logger):
                 logger.info(f"[Confluent] Topic '{topic_name}' already exists, skipping creation")
-                return
+                return {'status': {'create_applicationtopic': {'message': f"Topic '{topic_name}' already exists."}}}
             
             create_confluent_topic(topic_name, partitions, config, api_key, api_secret, cluster_id, rest_endpoint, logger)
             logger.info(f"[Confluent] Kafka topic '{topic_name}' created successfully")
+            return {'status': {'create_applicationtopic': {'message': f"Topic '{topic_name}' created successfully."}}}
         except Exception as e:
             logger.error(f"[Confluent] Error creating topic '{topic_name}': {e}")
             raise
 
-    retry_with_backoff(run, retry, logger, error_msg="Failed to create Kafka topic")
-
-    return {"message": f"Topic '{topic_name}' creation in progress."}
+    try:
+        result = retry_with_backoff(run, retry, logger, error_msg="Failed to create Kafka topic")
+        return result
+    except Exception as e:
+        return {'status': {'create_applicationtopic': {'message': f"Failed to create topic: {str(e)}"}}}
 
 @kopf.on.update('jones.com', 'v1', 'applicationtopics')
 def update_application_topic(spec, status, **kwargs):
@@ -145,7 +148,7 @@ def create_domaintopic(spec, name, namespace, status, **kwargs):
             logger.info(f"[Confluent] Retrieved credentials for topic '{topic_name}'")
             
             # Check if topic already exists
-            if check_application_topic(topic_name, api_key, api_secret, cluster_id, rest_endpoint, logger):
+            if check_topic_exists(topic_name, api_key, api_secret, cluster_id, rest_endpoint, logger):
                 logger.info(f"[Confluent] Topic '{topic_name}' already exists, skipping creation")
                 return {'status': {'create_domaintopic': {'message': f"Topic '{topic_name}' already exists."}}}
             
@@ -184,6 +187,11 @@ def update_domaintopic(spec, status, **kwargs):
 def delete_domaintopic(spec, name, namespace, **kwargs):
     logger.info(f"[Domaintopic] Deleted: '{name}' in namespace '{namespace}'")
     return {"message": f"Topic '{name}' deletion simulated."}
+
+#Domaintopic - Event
+@kopf.on.event('jones.com', 'v1', 'domaintopics')
+def debug_event_domaintopic(event, **kwargs):
+    logger.info(f"EVENT: {event['type']} for {event['object']['metadata']['name']}")
 
 # Confluent
 def get_confluent_credentials(namespace='argocd'): #RIDVAN NIKS VERANDERENN!!!!!!!!!!!!!!!!!!!!!!!
