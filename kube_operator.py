@@ -56,7 +56,7 @@ def create_applicationtopic(spec, name, namespace, logger, **kwargs):
 
     # Replace these with your actual values from Confluent Cloud
     cluster_id = "lkc-n9z7v3"  # <- YOUR cluster ID
-    rest_endpoint = "https://pkc-z1o60.europe-west1.gcp.confluent.cloud:443"  # <- YOUR REST endpoint (no trailing slash)
+    rest_endpoint = "https://pkc-z1o60.europe-west1.gcp.confluent.cloud:443"  # <- YOUR REST endpoint
 
     def run():
         try:
