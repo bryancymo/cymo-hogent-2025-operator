@@ -98,7 +98,7 @@ def create_applicationtopic(spec, name, namespace, **kwargs):
 
     return {"message": f"Topic '{topic_name}' creation in progress."}
 
-@kopf.on.update('argocd', 'ApplicationTopic')
+@kopf.on.update('jones.com', 'v1', 'applicationtopics')
 def update_application_topic(spec, status, **kwargs):
     logger.debug(f"Received update event for {spec['name']}")
     logger.debug(f"Spec: {spec}")
@@ -127,7 +127,7 @@ def debug_event(event, **kwargs):
 
 # Domaintopic
 @kopf.on.create('jones.com', 'v1', 'domaintopics')
-def create_domaintopic(spec, name, namespace, **kwargs):
+def create_domaintopic(spec, name, namespace, status, **kwargs):
     logger.info(f"[Domaintopic] Created: '{name}' in namespace '{namespace}'")
     retry = kwargs.get("retry", 0)
 
@@ -147,17 +147,20 @@ def create_domaintopic(spec, name, namespace, **kwargs):
             # Check if topic already exists
             if check_application_topic(topic_name, api_key, api_secret, cluster_id, rest_endpoint, logger):
                 logger.info(f"[Confluent] Topic '{topic_name}' already exists, skipping creation")
-                return
+                return {'status': {'create_domaintopic': {'message': f"Topic '{topic_name}' already exists."}}}
             
             create_confluent_topic(topic_name, partitions, config, api_key, api_secret, cluster_id, rest_endpoint, logger)
             logger.info(f"[Confluent] Kafka topic '{topic_name}' created successfully")
+            return {'status': {'create_domaintopic': {'message': f"Topic '{topic_name}' created successfully."}}}
         except Exception as e:
             logger.error(f"[Confluent] Error creating topic '{topic_name}': {e}")
             raise
 
-    retry_with_backoff(run, retry, logger, error_msg="Failed to create Kafka topic")
-
-    return {"message": f"Topic '{topic_name}' creation in progress."}
+    try:
+        result = retry_with_backoff(run, retry, logger, error_msg="Failed to create Kafka topic")
+        return result
+    except Exception as e:
+        return {'status': {'create_domaintopic': {'message': f"Failed to create topic: {str(e)}"}}}
 
 
 @kopf.on.update('jones.com', 'v1', 'domaintopics')
