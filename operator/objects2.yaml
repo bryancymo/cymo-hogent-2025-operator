@@ -1,0 +1,13 @@
+apiVersion: jones.com/v1
+kind: ApplicationTopic
+metadata:
+  name: test-applicationtopic08056
+  namespace: argocd
+spec:
+  name: test-applicationtopic08056
+  partitions: 3
+  config:
+    retentionMs: 604800000  # 7 days in milliseconds
+    cleanupPolicy: "delete"
+    replicationFactor: 3
+  consumers: []
