@@ -10,7 +10,8 @@ from kubernetes import client, config
 from kubernetes.client.rest import ApiException
 
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 @kopf.on.startup()
 def configure(settings: kopf.OperatorSettings, **_):
@@ -64,7 +65,7 @@ def check_application_topic(topic_name, api_key, api_secret, cluster_id, rest_en
         return False
 
 @kopf.on.create('jones.com', 'v1', 'applicationtopics')
-def create_applicationtopic(spec, name, namespace, logger, **kwargs):
+def create_applicationtopic(spec, name, namespace, **kwargs):
     logger.info(f"[ApplicationTopic] Created: '{name}' in namespace '{namespace}'")
     retry = kwargs.get("retry", 0)
 
