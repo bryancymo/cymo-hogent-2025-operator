@@ -125,6 +125,63 @@ def debug_event(event, logger, **kwargs):
     logger.info(f"EVENT: {event['type']} for {event['object']['metadata']['name']}")
 
 
+# Domaintopic
+@kopf.on.create('jones.com', 'v1', 'domaintopics')
+def create_domaintopic(spec, name, namespace, logger, **kwargs):
+    logger.info(f"[Domaintopic] Created: '{name}' in namespace '{namespace}'")
+    retry = kwargs.get("retry", 0)
+
+    topic_name = spec.get("name", name)
+    partitions = spec.get("partitions", 3)
+    config = spec.get("config", {})
+
+    # Replace these with your actual values from Confluent Cloud
+    cluster_id = "lkc-n9z7v3"  # <- YOUR cluster ID
+    rest_endpoint = "https://pkc-z1o60.europe-west1.gcp.confluent.cloud:443"  # <- YOUR REST endpoint
+
+    def run():
+        try:
+            api_key, api_secret = get_topic_credentials(logger, namespace='argocd')
+            logger.info(f"[Confluent] Retrieved credentials for topic '{topic_name}'")
+            
+            # Check if topic already exists
+            if check_application_topic(topic_name, api_key, api_secret, cluster_id, rest_endpoint, logger):
+                logger.info(f"[Confluent] Topic '{topic_name}' already exists, skipping creation")
+                return
+            
+            create_confluent_topic(topic_name, partitions, config, api_key, api_secret, cluster_id, rest_endpoint, logger)
+            logger.info(f"[Confluent] Kafka topic '{topic_name}' created successfully")
+        except Exception as e:
+            logger.error(f"[Confluent] Error creating topic '{topic_name}': {e}")
+            raise
+
+    retry_with_backoff(run, retry, logger, error_msg="Failed to create Kafka topic")
+
+    return {"message": f"Topic '{topic_name}' creation in progress."}
+
+
+@kopf.on.update('jones.com', 'v1', 'domaintopics')
+def update_domaintopic(spec, status, logger, **kwargs):
+    logger.debug(f"Received update event for {spec['name']}")
+    logger.debug(f"Spec: {spec}")
+    logger.debug(f"Status: {status}")
+    logger.debug(f"Event Type: {kwargs.get('type', 'None')}")
+
+    # Proceed with your logic here, if any changes are detected
+    if spec.get('replicationFactor') != status.get('replicationFactor', 0):
+        status['status'] = {'update_domaintopic': {'message': "Topic update simulated."}}
+        logger.debug(f"Updated status for {spec['name']}: {status}")
+        return {'status': status}
+    else:
+        logger.debug(f"No update needed for {spec['name']}")
+        return {}
+
+
+@kopf.on.delete('jones.com', 'v1', 'domaintopics')
+def delete_domaintopic(spec, name, namespace, logger, **kwargs):
+    logger.info(f"[Domaintopic] Deleted: '{name}' in namespace '{namespace}'")
+    return {"message": f"Topic '{name}' deletion simulated."}
+
 # Confluent
 logger = logging.getLogger(__name__)
 
