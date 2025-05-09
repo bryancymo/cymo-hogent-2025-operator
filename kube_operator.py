@@ -52,7 +52,6 @@ def create_applicationtopic(spec, name, namespace, logger, **kwargs):
     topic_name = spec.get("name", name)
     partitions = spec.get("partitions", 3)
     config = spec.get("config", {})
-    consumers = spec.get("consumers", [])
 
     # Replace these with your actual values from Confluent Cloud
     cluster_id = "lkc-n9z7v3"  # <- YOUR cluster ID
