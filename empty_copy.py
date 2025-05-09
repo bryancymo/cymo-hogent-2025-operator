@@ -382,7 +382,7 @@ def create_confluent_api_key(service_account_id, api_key, api_secret):
         logger.error(f"[Confluent] Failed to create API key: {e.response.text}")
         raise
     data = response.json()
-    logger.debug(f"[Confluent] Full API response: {data}")
+    logger.debug(f"[Confluent] Full API response: {data}")  # This logs the full response
     if 'key' not in data:
         logger.error("[Confluent] API response does not contain 'key'.")
         raise KeyError("API response does not contain 'key'.")
