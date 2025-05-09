@@ -5,7 +5,7 @@ metadata:
   namespace: argocd
 spec:
   name: test-applicationtopic08056
-  partitions: 3
+  partitions: 1
   config:
     retentionMs: 604800000  # 7 days in milliseconds
     cleanupPolicy: "delete"

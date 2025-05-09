@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 @kopf.on.startup()
 def configure(settings: kopf.OperatorSettings, **_):
     settings.watching.namespaces = ['argocd', 'operator']
+    settings.watching.cluster_wide = False  # Explicitly set to False since we're watching specific namespaces
 
 # Constants
 MAX_RETRIES = 1
