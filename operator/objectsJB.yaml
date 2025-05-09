@@ -1,3 +1,4 @@
+apiVersion: jones.com/v1
 kind: Servicealt
 metadata:
   name: test-servicealt08057
