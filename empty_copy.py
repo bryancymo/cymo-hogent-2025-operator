@@ -15,6 +15,7 @@ NAMESPACE_OPERATOR = "operator"
 CONFLUENT_SECRET_NAME = "confluent-credentials"
 SECRET_TYPE_OPAQUE = "Opaque"
 CONFIG_LOADED = False
+cluster_id = "lkc-n9z7v3"
 
 # Increase logging level to DEBUG
 # Options include: logging.DEBUG, logging.INFO, logging.WARNING, logging.ERROR, logging.CRITICAL
@@ -182,7 +183,7 @@ def create_servicealt(spec, name, namespace, logger, meta, **kwargs):
                 logger.warning(f"[Servicealt] Mismatch: Confluent SA '{sa_name}' has ID '{sa_id}', but K8s secret '{secret_name}' has SA ID '{sa_id_from_secret}'. Proceeding with Confluent SA ID.")
 
             # 3. Check if API Key exists for this Service Account in Confluent
-            existing_keys = get_confluent_api_keys_for_service_account(sa_id, mgmt_api_key, mgmt_api_secret)
+            existing_keys = get_confluent_api_keys_for_service_account(sa_id, cluster_id, mgmt_api_key, mgmt_api_secret)
             if existing_keys:
                 api_key_value = existing_keys[0]['key']
                 logger.warning(f"[Confluent] Existing API key found for service account {sa_id}. Cannot retrieve secret part via API.")
@@ -306,7 +307,7 @@ def delete_servicealt(spec, name, namespace, logger, meta, status, **kwargs):
                 sa_id = existing_sa['id']
                 # Delete API keys first
                 try:
-                    delete_confluent_api_keys_for_service_account(sa_id, mgmt_api_key, mgmt_api_secret)
+                    delete_confluent_api_keys_for_service_account(sa_id, cluster_id, mgmt_api_key, mgmt_api_secret)
                     logger.info(f"[Servicealt] Deleted API keys for service account '{sa_name}'")
                 except Exception as e:
                     logger.error(f"[Servicealt] Error deleting API keys: {e}")
@@ -440,14 +441,18 @@ def get_confluent_service_account_by_name(name, api_key, api_secret):
         logger.error(f"[Confluent] Error retrieving service account: {e}")
         return None
 
-def get_confluent_api_keys_for_service_account(service_account_id, api_key, api_secret):
+def get_confluent_api_keys_for_service_account(service_account_id, cluster_id, api_key, api_secret):
     url = "https://api.confluent.cloud/iam/v2/api-keys"
+    params = {
+        "spec.owner": service_account_id,
+        "spec.resource": cluster_id
+    }
     try:
-        logger.info(f"[Confluent] Fetching API keys for service account ID: {service_account_id}")
-        response = requests.get(url, auth=(api_key, api_secret))
+        logger.info(f"[Confluent] Fetching API keys for service account ID: {service_account_id} and cluster ID: {cluster_id}")
+        response = requests.get(url, auth=(api_key, api_secret), params=params)
         response.raise_for_status()
         keys = response.json().get("data", [])
-        return [key for key in keys if key.get("owner", {}).get("id") == service_account_id]
+        return keys
     except requests.HTTPError as e:
         logger.error(f"[Confluent] Failed to get API keys: {e.response.text}")
         raise
@@ -455,12 +460,12 @@ def get_confluent_api_keys_for_service_account(service_account_id, api_key, api_
         logger.exception("[Confluent] Unexpected error while retrieving API keys")
         raise
 
-def delete_confluent_api_keys_for_service_account(service_account_id, api_key, api_secret):
+def delete_confluent_api_keys_for_service_account(service_account_id, cluster_id, api_key, api_secret):
     """Delete all API keys associated with a service account."""
     url = "https://api.confluent.cloud/iam/v2/api-keys"
     try:
         # Get API keys for the service account
-        keys = get_confluent_api_keys_for_service_account(service_account_id, api_key, api_secret)
+        keys = get_confluent_api_keys_for_service_account(service_account_id, cluster_id, api_key, api_secret)
         
         # Delete each API key
         for key in keys:
