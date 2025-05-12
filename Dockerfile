@@ -9,8 +9,8 @@ WORKDIR /app
 
 # Copy your operator code into the image
 # Dit moet je nieet heel de tijd pushen AUB
-COPY kube_operator.py .
+COPY empty_copy.py .
 
 # Run the operator
-CMD ["kopf", "run", "--standalone", "kube_operator.py"]
+CMD ["kopf", "run", "--standalone", "empty_copy.py"]
 
