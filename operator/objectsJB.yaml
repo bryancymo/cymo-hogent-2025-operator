@@ -11,9 +11,9 @@ spec:
 apiVersion: jones.com/v1
 kind: Servicealt
 metadata:
-  name: service25041
+  name: service2504
   namespace: argocd
 spec:
-  name: service25041
+  name: service2504
   contextLink: test-context
   secretSolution: test-secret
