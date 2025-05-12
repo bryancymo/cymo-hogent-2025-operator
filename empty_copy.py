@@ -130,8 +130,9 @@ def update_context(spec, name, namespace, logger, **kwargs):
 def create_servicealt(spec, name, namespace, logger, meta, **kwargs):
     logger.info(f"[Servicealt] Created: '{name}' in namespace '{namespace}'")
     logger.info(f"ContextLink: {spec.get('contextLink')}, SecretSolution: {spec.get('secretSolution')}")
+    
+    # Handle retry logic
     retry = kwargs.get("retry", 0)
-
     if retry > 0:
         delay = min(2 ** retry + random.uniform(0, 5), 120)
         logger.warning(f"[Servicealt] Retry #{retry} - delaying for {delay:.2f} seconds.")
@@ -139,128 +140,81 @@ def create_servicealt(spec, name, namespace, logger, meta, **kwargs):
 
     sa_name = f"operator-hogent-{name}"
     secret_name = f"confluent-{sa_name}-credentials"
+    status = kopf.Status(meta)
+    status.state = 'Processing'
+    status.message = 'Starting service account creation'
 
     try:
-        # Initialize status
-        status = kopf.Status(meta)
-        status.state = 'Processing'
-        status.message = 'Starting service account creation'
-
-        # Load Confluent credentials from Kubernetes Secret
+        # Load Confluent credentials once
         mgmt_api_key, mgmt_api_secret = get_confluent_credentials(namespace=NAMESPACE_ARGOCD)
-
         v1 = client.CoreV1Api()
-        secret_exists_in_k8s = False
-        sa_id_from_secret = None
 
-        # 1. Check for an existing Kubernetes Secret
+        # Check for existing service account in Confluent
+        existing_sa = get_confluent_service_account_by_name(sa_name, mgmt_api_key, mgmt_api_secret)
+        sa_id = existing_sa['id'] if existing_sa else None
+
+        # Check for existing Kubernetes Secret
         try:
             k8s_secret = v1.read_namespaced_secret(secret_name, namespace)
-            secret_exists_in_k8s = True
-            logger.info(f"[K8S] Found existing secret '{secret_name}' in namespace '{namespace}'.")
-            if k8s_secret.data and 'SERVICE_ACCOUNT_ID' in k8s_secret.data:
-                sa_id_from_secret = base64.b64decode(k8s_secret.data['SERVICE_ACCOUNT_ID']).decode("utf-8")
-                logger.info(f"[K8S] Retrieved Service Account ID '{sa_id_from_secret}' from existing secret.")
-            else:
-                logger.warning(f"[K8S] Existing secret '{secret_name}' found but does not contain SERVICE_ACCOUNT_ID.")
+            secret_exists = True
+            sa_id_from_secret = base64.b64decode(k8s_secret.data['SERVICE_ACCOUNT_ID']).decode("utf-8") if k8s_secret.data and 'SERVICE_ACCOUNT_ID' in k8s_secret.data else None
+            
+            if sa_id and sa_id_from_secret and sa_id != sa_id_from_secret:
+                logger.warning(f"[Servicealt] Mismatch: Confluent SA '{sa_name}' has ID '{sa_id}', but K8s secret '{secret_name}' has SA ID '{sa_id_from_secret}'")
         except ApiException as e:
             if e.status != 404:
-                logger.error(f"[K8S] Failed reading secret '{secret_name}': {e}")
-                status.state = 'TemporaryError'
-                status.message = f"Failed to read K8s secret '{secret_name}': {e}"
                 raise kopf.TemporaryError(f"Failed to read K8s secret '{secret_name}': {e}", delay=60)
+            secret_exists = False
+            sa_id_from_secret = None
 
-        # 2. Check if Service Account exists in Confluent by name
-        existing_sa_in_confluent = get_confluent_service_account_by_name(sa_name, mgmt_api_key, mgmt_api_secret)
-        sa_id = None
-
-        if existing_sa_in_confluent:
-            sa_id = existing_sa_in_confluent['id']
-            logger.info(f"[Confluent] Found existing service account: ID={sa_id}")
-            status.state = 'Processing'
-            status.message = f'Using existing Confluent Service Account {sa_id}.'
-            if secret_exists_in_k8s and sa_id_from_secret and sa_id != sa_id_from_secret:
-                logger.warning(f"[Servicealt] Mismatch: Confluent SA '{sa_name}' has ID '{sa_id}', but K8s secret '{secret_name}' has SA ID '{sa_id_from_secret}'. Proceeding with Confluent SA ID.")
-
-            # 3. Check if API Key exists for this Service Account in Confluent
-            existing_keys = get_confluent_api_keys_for_service_account(sa_id, cluster_id, mgmt_api_key, mgmt_api_secret)
-            if existing_keys:
-                api_key_value = existing_keys[0]['id']
-                logger.warning(f"[Confluent] Existing API key found for service account {sa_id}. Cannot retrieve secret part via API.")
-                if secret_exists_in_k8s:
-                    logger.info(f"[K8S] Kubernetes Secret '{secret_name}' exists. Assuming it holds necessary credentials.")
-                    status.state = 'Ready'
-                    status.message = 'Using existing Confluent API key and Kubernetes secret.'
-                    status.serviceAccountId = sa_id
-                    status.credentialsSecretRef = {'name': secret_name, 'namespace': namespace}
-                    return {"message": f"Servicealt '{name}' processed, using credentials from secret '{secret_name}'."}
-                else:
-                    warning_message = f"Existing API key found for SA {sa_id}, but secret {secret_name} missing. Operator cannot provision credentials."
-                    logger.warning(f"[Servicealt] {warning_message}")
-                    status.state = 'Warning'
-                    status.message = warning_message
-                    status.serviceAccountId = sa_id
-                    return {"message": f"Servicealt '{name}' processed. Existing API key found, but K8s secret '{secret_name}' missing."}
-            else:
-                logger.info(f"[Confluent] No existing API keys for service account {sa_id}. Creating a new one.")
-                api_key_data = create_confluent_api_key(sa_id, sa_name, mgmt_api_key, mgmt_api_secret)
-                logger.debug(f"[Confluent] API key creation response: {api_key_data}")
-                api_key_value = api_key_data['id']
-                api_secret_value = api_key_data['secret']
-                logger.info(f"[Confluent] New API key created.")
-                status.state = 'Processing'
-                status.message = f'API Key created for SA {sa_id}.'
-                create_k8s_secret(namespace, secret_name, api_key_value, api_secret_value, sa_id)
-                logger.info(f"[K8S] Secret '{secret_name}' created/updated in namespace '{namespace}'.")
-                status.state = 'Processing'
-                status.message = f'Secret {secret_name} updated for SA {sa_id}.'
-                status.state = 'Ready'
-                status.message = 'Confluent Service Account and API Key provisioned; credentials stored in secret.'
-                status.serviceAccountId = sa_id
-                status.credentialsSecretRef = {'name': secret_name, 'namespace': namespace}
-                return {"message": f"Servicealt '{name}' processed; credentials stored in secret '{secret_name}'."}
-        else:
-            logger.info(f"[Confluent] Service account '{sa_name}' not found. Creating new service account.")
+        # If service account doesn't exist, create it
+        if not sa_id:
             try:
                 sa_response = create_confluent_service_account(sa_name, f"Service account for {name}", mgmt_api_key, mgmt_api_secret)
                 sa_id = sa_response['id']
                 logger.info(f"[Confluent] Service account created: ID={sa_id}")
-                status.state = 'Processing'
-                status.message = f'Service Account {sa_id} created.'
             except requests.exceptions.HTTPError as e:
                 if e.response.status_code == 409:
-                    # Service account already exists, try to get it again with retries
-                    logger.info(f"[Confluent] Service account creation failed with 409, attempting to fetch existing account")
-                    for attempt in range(3):  # Try up to 3 times
-                        time.sleep(2 ** attempt)  # Exponential backoff
+                    # Handle race condition where SA was created between our check and creation attempt
+                    for attempt in range(3):
+                        time.sleep(2 ** attempt)
                         existing_sa = get_confluent_service_account_by_name(sa_name, mgmt_api_key, mgmt_api_secret)
                         if existing_sa:
                             sa_id = existing_sa['id']
-                            logger.info(f"[Confluent] Retrieved existing service account: ID={sa_id}")
-                            status.state = 'Processing'
-                            status.message = f'Using existing Service Account {sa_id}.'
                             break
-                    else:
+                    if not sa_id:
                         raise Exception("Service account creation failed with 409 but could not find existing account after retries")
                 else:
                     raise
 
-            api_key_data = create_confluent_api_key(sa_id, sa_name, mgmt_api_key, mgmt_api_secret)
-            logger.debug(f"[Confluent] API key creation response: {api_key_data}")
-            api_key_value = api_key_data['id']
-            api_secret_value = api_key_data['secret']
-            logger.info(f"[Confluent] New API key created for new service account.")
-            status.state = 'Processing'
-            status.message = f'API Key created for SA {sa_id}.'
-            create_k8s_secret(namespace, secret_name, api_key_value, api_secret_value, sa_id)
-            logger.info(f"[K8S] Secret '{secret_name}' created/updated in namespace '{namespace}'.")
-            status.state = 'Processing'
-            status.message = f'Secret {secret_name} updated for SA {sa_id}.'
+        # Check for existing API keys
+        existing_keys = get_confluent_api_keys_for_service_account(sa_id, cluster_id, mgmt_api_key, mgmt_api_secret)
+        
+        if existing_keys and secret_exists:
+            # We have both API key and secret
             status.state = 'Ready'
-            status.message = 'Confluent Service Account and API Key provisioned; credentials stored in secret.'
+            status.message = 'Using existing Confluent API key and Kubernetes secret.'
             status.serviceAccountId = sa_id
             status.credentialsSecretRef = {'name': secret_name, 'namespace': namespace}
-            return {"message": f"Servicealt '{name}' processed; credentials stored in secret '{secret_name}'."}
+            return {"message": f"Servicealt '{name}' processed, using credentials from secret '{secret_name}'."}
+        
+        # Create new API key if needed
+        if not existing_keys:
+            api_key_data = create_confluent_api_key(sa_id, sa_name, mgmt_api_key, mgmt_api_secret)
+            api_key_value = api_key_data['id']
+            api_secret_value = api_key_data['secret']
+            logger.info(f"[Confluent] New API key created for service account {sa_id}")
+            
+            # Create/update Kubernetes secret
+            create_k8s_secret(namespace, secret_name, api_key_value, api_secret_value, sa_id)
+            logger.info(f"[K8S] Secret '{secret_name}' created/updated in namespace '{namespace}'")
+        
+        # Update final status
+        status.state = 'Ready'
+        status.message = 'Confluent Service Account and API Key provisioned; credentials stored in secret.'
+        status.serviceAccountId = sa_id
+        status.credentialsSecretRef = {'name': secret_name, 'namespace': namespace}
+        return {"message": f"Servicealt '{name}' processed; credentials stored in secret '{secret_name}'."}
 
     except Exception as e:
         logger.error(f"[Servicealt] Error occurred: {str(e)}\n{traceback.format_exc()}")
@@ -268,8 +222,7 @@ def create_servicealt(spec, name, namespace, logger, meta, **kwargs):
         status.message = f'Operation failed: {str(e)}'
         if isinstance(e, kopf.PermanentError):
             raise
-        else:
-            raise kopf.TemporaryError(f"[Servicealt] Temporary error: {e}", delay=60)
+        raise kopf.TemporaryError(f"[Servicealt] Temporary error: {e}", delay=60)
 
 
 @kopf.on.update('jones.com', 'v1', 'servicealts')
