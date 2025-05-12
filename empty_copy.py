@@ -268,11 +268,11 @@ def delete_servicealt(spec, name, namespace, logger, meta, status, **kwargs):
                     logger.error(f"[Servicealt] Error deleting API keys: {e}")
 
                 # Then delete the service account
-                try:
-                    delete_confluent_service_account(sa_id, mgmt_api_key, mgmt_api_secret)
-                    logger.info(f"[Servicealt] Deleted service account '{sa_name}'")
-                except Exception as e:
-                    logger.error(f"[Servicealt] Error deleting service account: {e}")
+                #try:
+                #    delete_confluent_service_account(sa_id, mgmt_api_key, mgmt_api_secret)
+                #    logger.info(f"[Servicealt] Deleted service account '{sa_name}'")
+                #except Exception as e:
+                #    logger.error(f"[Servicealt] Error deleting service account: {e}")
             else:
                 logger.info(f"[Servicealt] No service account found for '{sa_name}'")
         except Exception as e:
