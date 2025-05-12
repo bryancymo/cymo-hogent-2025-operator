@@ -204,17 +204,9 @@ def create_servicealt(spec, name, namespace, logger, meta, **kwargs):
             else:
                 logger.info(f"[Confluent] No existing API keys for service account {sa_id}. Creating a new one.")
                 api_key_data = create_confluent_api_key(sa_id, sa_name, mgmt_api_key, mgmt_api_secret)
-
-                # Log
                 logger.debug(f"[Confluent] API key creation response: {api_key_data}")
-
-                # Check for 'id' and 'spec.secret'
-                if 'id' not in api_key_data or 'spec' not in api_key_data or 'secret' not in api_key_data['spec']:
-                    logger.error(f"[Confluent] API response does not contain expected fields. Full response: {api_key_data}")
-                    raise KeyError("API response does not contain expected fields.")
-
                 api_key_value = api_key_data['id']
-                api_secret_value = api_key_data['spec']['secret']
+                api_secret_value = api_key_data['secret']
                 logger.info(f"[Confluent] New API key created.")
                 status.state = 'Processing'
                 status.message = f'API Key created for SA {sa_id}.'
@@ -256,7 +248,7 @@ def create_servicealt(spec, name, namespace, logger, meta, **kwargs):
             api_key_data = create_confluent_api_key(sa_id, sa_name, mgmt_api_key, mgmt_api_secret)
             logger.debug(f"[Confluent] API key creation response: {api_key_data}")
             api_key_value = api_key_data['id']
-            api_secret_value = api_key_data['spec']['secret']
+            api_secret_value = api_key_data['secret']
             logger.info(f"[Confluent] New API key created for new service account.")
             status.state = 'Processing'
             status.message = f'API Key created for SA {sa_id}.'
