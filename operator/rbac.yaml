@@ -22,7 +22,7 @@ rules:
   # Grant permissions for standard Kubernetes resources
   - apiGroups: [""]
     resources: ["pods", "services", "endpoints", "configmaps", "secrets", "namespaces"]
-    verbs: ["get", "list", "watch"]
+    verbs: ["get", "list", "watch", "create", "update"]
 
   # Allow Kopf to create events in any namespace
   - apiGroups: [""]
