@@ -7,3 +7,13 @@ spec:
   name: test-servicealt12
   contextLink: test-context
   secretSolution: test-secret
+---
+apiVersion: jones.com/v1
+kind: Servicealt
+metadata:
+  name: servicealt-0805
+  namespace: argocd
+spec:
+  name: servicealt-0805
+  contextLink: test-context
+  secretSolution: test-secret
