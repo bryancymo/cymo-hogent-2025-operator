@@ -39,7 +39,7 @@ metadata:
   labels:
     app: kafka-topic-operator-v2
 spec:
-  replicas: 0
+  replicas: 1
   selector:
     matchLabels:
       app: kafka-topic-operator-v2
