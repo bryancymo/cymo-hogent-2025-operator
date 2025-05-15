@@ -12,10 +12,10 @@ from kubernetes.client.rest import ApiException
 # Constants
 NAMESPACE_ARGOCD = "argocd"
 NAMESPACE_OPERATOR = "operator"
-CONFLUENT_SECRET_NAME = "confluent-credentials"
+CONFLUENT_SECRET_NAME = "confluent2-credentials"
 SECRET_TYPE_OPAQUE = "Opaque"
 CONFIG_LOADED = False
-cluster_id = "lkc-n9z7v3"
+cluster_id = "lkc-vv08z0"
 
 # Increase logging level to DEBUG
 # Options include: logging.DEBUG, logging.INFO, logging.WARNING, logging.ERROR, logging.CRITICAL
@@ -138,8 +138,8 @@ def create_servicealt(spec, name, namespace, logger, meta, **kwargs):
         logger.warning(f"[Servicealt] Retry #{retry} - delaying for {delay:.2f} seconds.")
         time.sleep(delay)
 
-    sa_name = f"operator-hogent-{name}"
-    secret_name = f"confluent-{sa_name}-credentials"
+    sa_name = f"operator2-hogent-{name}"
+    secret_name = f"confluent2-{sa_name}-credentials"
     status = kopf.Status(meta)
     status.state = 'Processing'
     status.message = 'Starting service account creation'
