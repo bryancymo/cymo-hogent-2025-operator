@@ -329,10 +329,10 @@ def create_confluent_api_key(service_account_id, service_account_name, api_key, 
             "display_name": f"API Key for {service_account_name}",
             "description": "Empty",
             "owner": {"id": service_account_id},
-            "resource": {"id": "lkc-n9z7v3", "type": "kafka-cluster"}
+            "resource": {"id": cluster_id, "type": "kafka-cluster"}
         }
     }
-    logger.info(f"[Confluent] Creating API key for service account ID: {service_account_id} and cluster ID: lkc-n9z7v3")
+    logger.info(f"[Confluent] Creating API key for service account ID: {service_account_id} and cluster ID: {cluster_id}")
     response = requests.post(url, json=payload, auth=(api_key, api_secret))
     try:
         response.raise_for_status()
