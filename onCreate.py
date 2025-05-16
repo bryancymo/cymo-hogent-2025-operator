@@ -17,6 +17,9 @@ SECRET_TYPE_OPAQUE = "Opaque"
 CONFIG_LOADED = False
 cluster_id = "lkc-vv08z0"
 
+# Global variable for Kubernetes client
+v1 = None
+
 # Increase logging level to DEBUG
 # Options include: logging.DEBUG, logging.INFO, logging.WARNING, logging.ERROR, logging.CRITICAL
 logging.basicConfig(level=logging.DEBUG)
@@ -24,13 +27,15 @@ logger = logging.getLogger(__name__)
 
 @kopf.on.startup()
 def configure(settings: kopf.OperatorSettings, **_):
-    global CONFIG_LOADED
+    global CONFIG_LOADED, v1
     if not CONFIG_LOADED:
         try:
             config.load_incluster_config()
             CONFIG_LOADED = True
             logger.debug("[Startup] Attempting to load Kubernetes configuration.")
             logger.info("[Startup] Kubernetes configuration loaded successfully.")
+            # Initialize the CoreV1Api client
+            v1 = client.CoreV1Api()
         except Exception as e:
             logger.error(f"[Startup] Failed to load Kubernetes configuration: {e}")
             raise
@@ -38,47 +43,61 @@ def configure(settings: kopf.OperatorSettings, **_):
 
 # Servicealt
 @kopf.on.create('jones.com', 'v1', 'servicealts')
-def create_servicealt(spec, name, namespace, logger, meta, **kwargs):
+def create_servicealt(spec, name, namespace, logger, meta, patch, status, **kwargs):
+    # Check if the resource is being deleted
+    if meta.get('deletionTimestamp'):
+        logger.info(f"[Servicealt] Resource '{name}' is being deleted, skipping creation")
+        return
+
     logger.info(f"[Servicealt] Created: '{name}' in namespace '{namespace}'")
     logger.info(f"ContextLink: {spec.get('contextLink')}, SecretSolution: {spec.get('secretSolution')}")
-    
-    # Handle retry logic
+
+    # Check if the resource is already processed and in Ready state
+    if status and status.get('state') == 'Ready':
+        logger.info(f"[Servicealt] Resource '{name}' is already in Ready state, skipping processing")
+        return
+
     retry = kwargs.get("retry", 0)
     if retry > 0:
         delay = min(2 ** retry + random.uniform(0, 5), 120)
         logger.warning(f"[Servicealt] Retry #{retry} - delaying for {delay:.2f} seconds.")
-        time.sleep(delay)
+        raise kopf.TemporaryError(f"[Servicealt] Temporary error: Retry #{retry}", delay=delay)
 
     sa_name = f"operator2-hogent-{name}"
     secret_name = f"confluent2-{sa_name}-credentials"
-    status = kopf.Status(meta)
-    status.state = 'Processing'
-    status.message = 'Starting service account creation'
+
+    # Initialize patch.status if it doesn't exist
+    if not isinstance(patch.status, dict):
+        patch.status = {}
+
+    # Initial status update
+    patch.status['state'] = 'Processing'
+    patch.status['message'] = 'Starting service account creation'
 
     try:
-        # Load Confluent credentials once
         mgmt_api_key, mgmt_api_secret = get_confluent_credentials(namespace=NAMESPACE_ARGOCD)
-        v1 = client.CoreV1Api()
 
-        # Check for existing service account in Confluent
         existing_sa = get_confluent_service_account_by_name(sa_name, mgmt_api_key, mgmt_api_secret)
         sa_id = existing_sa['id'] if existing_sa else None
 
-        # Check for existing Kubernetes Secret
         try:
             k8s_secret = v1.read_namespaced_secret(secret_name, namespace)
             secret_exists = True
-            sa_id_from_secret = base64.b64decode(k8s_secret.data['SERVICE_ACCOUNT_ID']).decode("utf-8") if k8s_secret.data and 'SERVICE_ACCOUNT_ID' in k8s_secret.data else None
-            
+            sa_id_from_secret = base64.b64decode(k8s_secret.data['SERVICE_ACCOUNT_ID']).decode("utf-8") \
+                if k8s_secret.data and 'SERVICE_ACCOUNT_ID' in k8s_secret.data else None
+
             if sa_id and sa_id_from_secret and sa_id != sa_id_from_secret:
                 logger.warning(f"[Servicealt] Mismatch: Confluent SA '{sa_name}' has ID '{sa_id}', but K8s secret '{secret_name}' has SA ID '{sa_id_from_secret}'")
+                v1.delete_namespaced_secret(secret_name, namespace)
+                logger.info(f"[K8S] Mismatched secret '{secret_name}' removed from namespace '{namespace}'")
+                secret_exists = False
+                sa_id_from_secret = None
         except ApiException as e:
             if e.status != 404:
                 raise kopf.TemporaryError(f"Failed to read K8s secret '{secret_name}': {e}", delay=60)
             secret_exists = False
             sa_id_from_secret = None
 
-        # If service account doesn't exist, create it
         if not sa_id:
             try:
                 sa_response = create_confluent_service_account(sa_name, f"Service account for {name}", mgmt_api_key, mgmt_api_secret)
@@ -86,7 +105,6 @@ def create_servicealt(spec, name, namespace, logger, meta, **kwargs):
                 logger.info(f"[Confluent] Service account created: ID={sa_id}")
             except requests.exceptions.HTTPError as e:
                 if e.response.status_code == 409:
-                    # Handle race condition where SA was created between our check and creation attempt
                     for attempt in range(3):
                         time.sleep(2 ** attempt)
                         existing_sa = get_confluent_service_account_by_name(sa_name, mgmt_api_key, mgmt_api_secret)
@@ -98,70 +116,129 @@ def create_servicealt(spec, name, namespace, logger, meta, **kwargs):
                 else:
                     raise
 
-        # Check for existing API keys
         existing_keys = get_confluent_api_keys_for_service_account(sa_id, cluster_id, mgmt_api_key, mgmt_api_secret)
-        
+
         if existing_keys and secret_exists:
-            # We have both API key and secret
-            status.state = 'Ready'
-            status.message = 'Using existing Confluent API key and Kubernetes secret.'
-            status.serviceAccountId = sa_id
-            status.credentialsSecretRef = {'name': secret_name, 'namespace': namespace}
-            return {"message": f"Servicealt '{name}' processed, using credentials from secret '{secret_name}'."}
-        
-        # Create new API key if needed
+            patch.status['state'] = 'Ready'
+            patch.status['message'] = f"Using existing Confluent API key and Kubernetes secret for '{name}'."
+            patch.status['serviceAccountId'] = sa_id
+            patch.status['credentialsSecretRef'] = {'name': secret_name, 'namespace': namespace}
+            logger.info(f"[Servicealt] Using existing resources for '{name}'")
+            return
+
         if not existing_keys:
             api_key_data = create_confluent_api_key(sa_id, sa_name, mgmt_api_key, mgmt_api_secret)
             api_key_value = api_key_data['id']
             api_secret_value = api_key_data['secret']
             logger.info(f"[Confluent] New API key created for service account {sa_id}")
-            
-            # Create/update Kubernetes secret
-            create_k8s_secret(namespace, secret_name, api_key_value, api_secret_value, sa_id)
-            logger.info(f"[K8S] Secret '{secret_name}' created/updated in namespace '{namespace}'")
-        
-        # Update final status
-        status.state = 'Ready'
-        status.message = 'Confluent Service Account and API Key provisioned; credentials stored in secret.'
-        status.serviceAccountId = sa_id
-        status.credentialsSecretRef = {'name': secret_name, 'namespace': namespace}
-        return {"message": f"Servicealt '{name}' processed; credentials stored in secret '{secret_name}'."}
+
+            try:
+                create_k8s_secret(namespace, secret_name, api_key_value, api_secret_value, sa_id)
+                logger.info(f"[K8S] Secret '{secret_name}' created/updated in namespace '{namespace}'")
+            except Exception as e:
+                logger.error(f"[K8S] Failed to create/update secret '{secret_name}': {e}")
+                raise kopf.TemporaryError(f"[K8S] Temporary error creating/updating secret '{secret_name}': {e}", delay=60)
+
+        # Final status update
+        patch.status['state'] = 'Ready'
+        patch.status['message'] = 'Confluent Service Account and API Key provisioned; credentials stored in secret.'
+        patch.status['serviceAccountId'] = sa_id
+        patch.status['credentialsSecretRef'] = {'name': secret_name, 'namespace': namespace}
+        logger.info(f"Servicealt '{name}' processed; credentials stored in secret '{secret_name}'.")
 
     except Exception as e:
-        logger.error(f"[Servicealt] Error occurred: {str(e)}\n{traceback.format_exc()}")
-        status.state = 'Failed'
-        status.message = f'Operation failed: {str(e)}'
+        logger.error(f"[Servicealt] Error occurred during processing of '{name}': {str(e)}\n{traceback.format_exc()}")
+        patch.status['state'] = 'Failed'
+        patch.status['message'] = f'Operation failed for {name}: {str(e)}'
         if isinstance(e, kopf.PermanentError):
             raise
-        raise kopf.TemporaryError(f"[Servicealt] Temporary error: {e}", delay=60)
+        raise kopf.TemporaryError(f"[Servicealt] Temporary error processing '{name}': {e}", delay=60)
 
 
 @kopf.on.update('jones.com', 'v1', 'servicealts')
-def update_servicealt(spec, name, namespace, logger, **kwargs):
+def update_servicealt(spec, name, namespace, logger, patch, **kwargs):
     logger.info(f"[Servicealt] Updated: '{name}' in namespace '{namespace}'")
     logger.info(f"ContextLink: {spec.get('contextLink')}, SecretSolution: {spec.get('secretSolution')}")
-    return {"message": f"Servicealt '{name}' update logged."}
+    # Update the status to indicate the service has been updated
+    patch.status['state'] = 'Updated'
+    patch.status['message'] = f"Servicealt '{name}' has been successfully updated."
 
+
+@kopf.on.delete('jones.com', 'v1', 'servicealts')
+def delete_servicealt(spec, name, namespace, logger, patch, **kwargs):
+    logger.info(f"[Servicealt] Deleting: '{name}' in namespace '{namespace}'")
+    
+    # Update status to indicate deletion is in progress
+    patch.status['state'] = 'Deleting'
+    patch.status['message'] = 'Cleaning up resources'
+    
+    try:
+        # Get Confluent credentials
+        mgmt_api_key, mgmt_api_secret = get_confluent_credentials(namespace=NAMESPACE_ARGOCD)
+        
+        # Construct service account name
+        sa_name = f"operator2-hogent-{name}"
+        
+        # Get the service account ID from the secret if it exists
+        secret_name = f"confluent2-{sa_name}-credentials"
+        try:
+            k8s_secret = v1.read_namespaced_secret(secret_name, namespace)
+            service_account_id = base64.b64decode(k8s_secret.data['SERVICE_ACCOUNT_ID']).decode("utf-8")
+            
+            # Delete API keys first
+            try:
+                delete_confluent_api_keys_for_service_account(service_account_id, cluster_id, mgmt_api_key, mgmt_api_secret)
+                logger.info(f"[Confluent] Deleted API keys for service account ID: {service_account_id}")
+            except Exception as e:
+                logger.error(f"[Confluent] Error deleting API keys: {e}")
+            
+            # Delete service account
+            try:
+                delete_confluent_service_account(service_account_id, mgmt_api_key, mgmt_api_secret)
+                logger.info(f"[Confluent] Deleted service account ID: {service_account_id}")
+            except Exception as e:
+                logger.error(f"[Confluent] Error deleting service account: {e}")
+                
+        except ApiException as e:
+            if e.status != 404:
+                logger.error(f"[K8S] Error reading secret '{secret_name}': {e}")
+        
+        # Delete Kubernetes secret
+        try:
+            v1.delete_namespaced_secret(secret_name, namespace)
+            logger.info(f"[K8S] Deleted secret '{secret_name}' from namespace '{namespace}'")
+        except ApiException as e:
+            if e.status != 404:
+                logger.error(f"[K8S] Error deleting secret '{secret_name}': {e}")
+        
+        # Delete any other associated resources
+        delete_associated_resources(name, namespace)
+        
+        logger.info(f"[Servicealt] Successfully cleaned up resources for '{name}'")
+        
+    except Exception as e:
+        logger.error(f"[Servicealt] Error during cleanup of '{name}': {str(e)}\n{traceback.format_exc()}")
+        raise kopf.TemporaryError(f"[Servicealt] Error during cleanup: {e}", delay=60)
 
 # Confluent helpers
 def get_confluent_credentials(namespace=NAMESPACE_ARGOCD):
     try:
         logger.info(f"[Confluent] Loading credentials from namespace '{namespace}'")
-        v1 = client.CoreV1Api()
         secret = v1.read_namespaced_secret(CONFLUENT_SECRET_NAME, namespace)
         api_key = base64.b64decode(secret.data['API_KEY']).decode("utf-8")
         api_secret = base64.b64decode(secret.data['API_SECRET']).decode("utf-8")
         logger.info("[Confluent] Credentials loaded successfully")
         return api_key, api_secret
-    except ApiException as e:
+    except client.ApiException as e:
         raise RuntimeError(f"[Confluent] Failed to read secret from namespace '{namespace}': {e}")
     except KeyError as e:
         raise ValueError(f"[Confluent] Missing key in secret: {e}")
+    except base64.binascii.Error as e:
+        raise ValueError(f"[Confluent] Error decoding base64 data: {e}")
     except Exception as e:
         raise RuntimeError(f"[Confluent] Error fetching credentials: {e}")
 
 def create_k8s_secret(namespace, secret_name, api_key, api_secret, service_account_id):
-    v1 = client.CoreV1Api()
     secret_manifest = client.V1Secret(
         metadata=client.V1ObjectMeta(name=secret_name, namespace=namespace),
         string_data={
@@ -252,6 +329,9 @@ def get_confluent_service_account_by_name(name, api_key, api_secret):
         else:
             logger.warning(f"[Confluent] No matching service account found for: '{name}'")
         return matched
+    except requests.HTTPError as e:
+        logger.error(f"[Confluent] HTTP error retrieving service account: {e.response.text}")
+        return None
     except Exception as e:
         logger.error(f"[Confluent] Error retrieving service account: {e}")
         return None
@@ -269,7 +349,7 @@ def get_confluent_api_keys_for_service_account(service_account_id, cluster_id, a
         keys = response.json().get("data", [])
         return keys
     except requests.HTTPError as e:
-        logger.error(f"[Confluent] Failed to get API keys: {e.response.text}")
+        logger.error(f"[Confluent] HTTP error retrieving API keys: {e.response.text}")
         raise
     except Exception as e:
         logger.exception("[Confluent] Unexpected error while retrieving API keys")
@@ -299,12 +379,9 @@ def delete_confluent_service_account(service_account_id, api_key, api_secret):
         response.raise_for_status()
     except Exception as e:
         raise Exception(f"Failed to delete service account: {str(e)}")
-    
-    pass
 
 def delete_associated_resources(name, namespace):
     """Delete any associated Kubernetes resources."""
-    v1 = client.CoreV1Api()
     
     # Delete configmaps
     try:
