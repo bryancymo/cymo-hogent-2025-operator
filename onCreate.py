@@ -43,6 +43,42 @@ def configure(settings: kopf.OperatorSettings, **_):
             raise
     settings.watching.namespaces = [NAMESPACE_ARGOCD, NAMESPACE_OPERATOR]
 
+
+#ApplicationTopic
+@kopf.on.create('jones.com', 'v1', 'applicationtopics')
+def create_applicationtopic(spec, name, namespace, status, **kwargs):
+    logger.info(f"[ApplicationTopic] Created: '{name}' in namespace '{namespace}'")
+    retry = kwargs.get("retry", 0)
+
+    topic_name = spec.get("name", name)
+    partitions = spec.get("partitions", 1)
+    config = spec.get("config", {})
+
+    rest_endpoint = "https://pkc-z1o60.europe-west1.gcp.confluent.cloud:443"  # <- YOUR REST endpoint
+
+    def run():
+        try:
+            api_key, api_secret = get_topic_credentials(logger, namespace='argocd')
+            logger.info(f"[Confluent] Retrieved credentials for topic '{topic_name}'")
+            
+            # Check if topic already exists
+            if check_topic_exists(topic_name, api_key, api_secret, cluster_id, rest_endpoint, logger):
+                logger.info(f"[Confluent] Topic '{topic_name}' already exists, skipping creation")
+                return {'status': {'create_applicationtopic': {'message': f"Topic '{topic_name}' already exists."}}}
+            
+            create_confluent_topic(topic_name, partitions, config, api_key, api_secret, cluster_id, rest_endpoint, logger)
+            logger.info(f"[Confluent] Kafka topic '{topic_name}' created successfully")
+            return {'status': {'create_applicationtopic': {'message': f"Topic '{topic_name}' created successfully."}}}
+        except Exception as e:
+            logger.error(f"[Confluent] Error creating topic '{topic_name}': {e}")
+            raise
+
+    try:
+        result = retry_with_backoff(run, retry, logger, error_msg="Failed to create Kafka topic")
+        return result
+    except Exception as e:
+        return {'status': {'create_applicationtopic': {'message': f"Failed to create topic: {str(e)}"}}}
+
 # Servicealt
 @kopf.on.create('jones.com', 'v1', 'servicealts')
 def create_servicealt(spec, name, namespace, logger, meta, patch, **kwargs):
@@ -51,108 +87,143 @@ def create_servicealt(spec, name, namespace, logger, meta, patch, **kwargs):
         logger.info(f"[Servicealt] Resource '{name}' is being deleted, skipping creation")
         return
 
-    logger.info(f"[Servicealt] Created: '{name}' in namespace '{namespace}'")
-    logger.info(f"ContextLink: {spec.get('contextLink')}, SecretSolution: {spec.get('secretSolution')}")
+    logger.info(f"[Servicealt] Processing creation for: '{name}' in namespace '{namespace}'") # Added more specific log
+    logger.info(f"[Servicealt] ContextLink: {spec.get('contextLink')}, SecretSolution: {spec.get('secretSolution')}")
 
     retry = kwargs.get("retry", 0)
     if retry > 0:
-        capped_retry = min(retry, 30)
-        delay = min(2 ** capped_retry + random.uniform(0, 5), 120)
-        logger.warning(f"[Servicealt] Retry #{retry} - delaying for {delay:.2f} seconds.")
-        raise kopf.TemporaryError(f"[Servicealt] Temporary error: Retry #{retry}", delay=delay)
+        delay = 30  # Flat 30-second retry duration
+        logger.info(f"[Servicealt] Retry attempt #{retry} for '{name}'. Setting delay to a flat {delay} seconds.") # Added log for retry
+        logger.warning(f"[Servicealt] Retry #{retry} - delaying for {delay:.2f} seconds.") # Existing log, will now show 30.00
+        raise kopf.TemporaryError(f"[Servicealt] Temporary error: Retry #{retry}. Will retry in {delay}s.", delay=delay)
 
     sa_name = f"operator2-hogent-{name}"
     secret_name = f"confluent2-{sa_name}-credentials"
 
     # Initial status update
+    logger.info(f"[Servicealt] Setting initial status to 'Processing' for '{name}'.") # Added log
     patch.status['state'] = 'Processing'
     patch.status['message'] = 'Starting service account creation'
 
     try:
+        logger.info(f"[Servicealt] Attempting to get Confluent credentials for '{name}'.") # Added log
         mgmt_api_key, mgmt_api_secret = get_confluent_credentials(namespace=NAMESPACE_ARGOCD)
+        logger.info(f"[Servicealt] Successfully retrieved Confluent credentials for '{name}'.") # Added log
 
+        logger.info(f"[Servicealt] Checking for existing Confluent service account '{sa_name}' for '{name}'.") # Added log
         existing_sa = get_confluent_service_account_by_name(sa_name, mgmt_api_key, mgmt_api_secret)
         sa_id = existing_sa['id'] if existing_sa else None
+        if sa_id:
+            logger.info(f"[Servicealt] Found existing Confluent service account '{sa_name}' with ID '{sa_id}' for '{name}'.") # Added log
+        else:
+            logger.info(f"[Servicealt] No existing Confluent service account found for '{sa_name}' for '{name}'. Will create.") # Added log
+
 
         try:
+            logger.info(f"[Servicealt] Checking for K8s secret '{secret_name}' in namespace '{namespace}' for '{name}'.") # Added log
             k8s_secret = v1.read_namespaced_secret(secret_name, namespace)
             secret_exists = True
+            logger.info(f"[Servicealt] K8s secret '{secret_name}' exists for '{name}'.") # Added log
             sa_id_from_secret = base64.b64decode(k8s_secret.data['SERVICE_ACCOUNT_ID']).decode("utf-8") \
                 if k8s_secret.data and 'SERVICE_ACCOUNT_ID' in k8s_secret.data else None
 
             if sa_id and sa_id_from_secret and sa_id != sa_id_from_secret:
-                logger.warning(f"[Servicealt] Mismatch: Confluent SA '{sa_name}' has ID '{sa_id}', but K8s secret '{secret_name}' has SA ID '{sa_id_from_secret}'")
+                logger.warning(f"[Servicealt] Mismatch: Confluent SA '{sa_name}' ID '{sa_id}' vs K8s secret SA ID '{sa_id_from_secret}' for '{name}'. Deleting K8s secret.")
                 v1.delete_namespaced_secret(secret_name, namespace)
-                logger.info(f"[K8S] Mismatched secret '{secret_name}' removed from namespace '{namespace}'")
+                logger.info(f"[K8S] Mismatched secret '{secret_name}' removed from namespace '{namespace}' for '{name}'.")
                 secret_exists = False
                 sa_id_from_secret = None
         except ApiException as e:
             if e.status != 404:
-                raise kopf.TemporaryError(f"Failed to read K8s secret '{secret_name}': {e}", delay=60)
+                logger.error(f"[Servicealt] Error reading K8s secret '{secret_name}' for '{name}': {e}. Raising temporary error.") # Added log
+                raise kopf.TemporaryError(f"Failed to read K8s secret '{secret_name}': {e}", delay=60) # Standard delay for this error
+            logger.info(f"[Servicealt] K8s secret '{secret_name}' not found for '{name}'.") # Added log
             secret_exists = False
             sa_id_from_secret = None
 
         if not sa_id:
+            logger.info(f"[Servicealt] Creating Confluent service account '{sa_name}' for '{name}'.") # Added log
             try:
                 sa_response = create_confluent_service_account(sa_name, f"Service account for {name}", mgmt_api_key, mgmt_api_secret)
                 sa_id = sa_response['id']
-                logger.info(f"[Confluent] Service account created: ID={sa_id}")
+                logger.info(f"[Confluent] Service account '{sa_name}' created with ID: {sa_id} for '{name}'.")
             except requests.exceptions.HTTPError as e:
-                if e.response.status_code == 409:
+                logger.error(f"[Servicealt] HTTPError creating Confluent SA '{sa_name}' for '{name}': {e.response.text if e.response else e}") # Added log
+                if e.response is not None and e.response.status_code == 409:
+                    logger.warning(f"[Servicealt] Confluent SA '{sa_name}' creation returned 409 (conflict) for '{name}'. Attempting to find existing SA.")
                     for attempt in range(3):
                         time.sleep(2 ** attempt)
-                        existing_sa = get_confluent_service_account_by_name(sa_name, mgmt_api_key, mgmt_api_secret)
-                        if existing_sa:
-                            sa_id = existing_sa['id']
+                        existing_sa_retry = get_confluent_service_account_by_name(sa_name, mgmt_api_key, mgmt_api_secret)
+                        if existing_sa_retry:
+                            sa_id = existing_sa_retry['id']
+                            logger.info(f"[Servicealt] Found existing SA '{sa_name}' with ID '{sa_id}' after 409 retry for '{name}'.")
                             break
                     if not sa_id:
-                        raise Exception("Service account creation failed with 409 but could not find existing account after retries")
+                        logger.error(f"[Servicealt] Failed to find existing SA '{sa_name}' after 409 and retries for '{name}'. Raising exception.")
+                        raise Exception(f"Service account {sa_name} creation failed with 409 but could not find existing account after retries")
                 else:
                     raise
 
-        if sa_id: # Ensure we have an SA ID before attempting role assignment
+        if sa_id:
+             logger.info(f"[Servicealt] Assigning 'Operator' role to Confluent SA ID '{sa_id}' for '{name}'.") # Added log
              assign_role_binding(sa_id, mgmt_api_key, mgmt_api_secret, "Operator")
-             logger.info(f"[Confluent] Operator role assigned/re-assigned using dynamic function to service account ID: {sa_id}")
+             logger.info(f"[Confluent] Operator role assigned/re-assigned to service account ID: {sa_id} for '{name}'.")
         else:
-             logger.error(f"[Servicealt] Cannot assign role, service account ID is not available for '{name}'")
+             logger.error(f"[Servicealt] Cannot assign role for '{name}', Confluent service account ID is not available.")
 
 
+        logger.info(f"[Servicealt] Getting existing Confluent API keys for SA ID '{sa_id}', cluster '{cluster_id}' for '{name}'.") # Added log
         existing_keys = get_confluent_api_keys_for_service_account(sa_id, cluster_id, mgmt_api_key, mgmt_api_secret)
 
         if existing_keys and secret_exists:
+            logger.info(f"[Servicealt] Using existing Confluent API key and K8s secret for '{name}'. Setting status to 'Ready'.") # Added log
             patch.status['state'] = 'Ready'
             patch.status['message'] = f"Using existing Confluent API key and Kubernetes secret for '{name}'."
             patch.status['serviceAccountId'] = sa_id
             patch.status['credentialsSecretRef'] = {'name': secret_name, 'namespace': namespace}
-
-        if not existing_keys:
+        elif not existing_keys: # Added elif for clarity
+            logger.info(f"[Servicealt] No existing Confluent API keys found for SA ID '{sa_id}' for '{name}'. Creating new API key.") # Added log
             api_key_data = create_confluent_api_key(sa_id, sa_name, mgmt_api_key, mgmt_api_secret)
             api_key_value = api_key_data['id']
             api_secret_value = api_key_data['secret']
-            logger.info(f"[Confluent] New API key created for service account {sa_id}")
+            logger.info(f"[Confluent] New API key created for service account {sa_id} for '{name}'.")
             
             try:
+                logger.info(f"[Servicealt] Creating/updating K8s secret '{secret_name}' in '{namespace}' for '{name}'.") # Added log
                 create_k8s_secret(namespace, secret_name, api_key_value, api_secret_value, sa_id)
-                logger.info(f"[K8S] Secret '{secret_name}' created/updated in namespace '{namespace}'")
+                logger.info(f"[K8S] Secret '{secret_name}' created/updated in namespace '{namespace}' for '{name}'.")
             except Exception as e:
-                logger.error(f"[K8S] Failed to create/update secret '{secret_name}': {e}")
-                raise kopf.TemporaryError(f"[K8S] Temporary error creating/updating secret '{secret_name}': {e}", delay=60)
+                logger.error(f"[K8S] Failed to create/update K8s secret '{secret_name}' for '{name}': {e}")
+                raise kopf.TemporaryError(f"[K8S] Temporary error creating/updating secret '{secret_name}': {e}", delay=60) # Standard delay
 
-        patch.status['state'] = 'Ready'
-        patch.status['message'] = 'Confluent Service Account and API Key provisioned; credentials stored in secret.'
-        patch.status['serviceAccountId'] = sa_id
-        patch.status['credentialsSecretRef'] = {'name': secret_name, 'namespace': namespace}
-        logger.info(f"Servicealt '{name}' processed; credentials stored in secret '{secret_name}'.")
+        # Final status update, ensure it happens if keys were created or already existed and secret was fine/recreated
+        # This block should be reached if we have sa_id and keys (either pre-existing or newly created)
+        if sa_id : # Ensure sa_id is valid before this final patch
+            logger.info(f"[Servicealt] Finalizing status to 'Ready' for '{name}'.") # Added log
+            patch.status['state'] = 'Ready'
+            patch.status['message'] = 'Confluent Service Account and API Key provisioned; credentials stored in secret.'
+            patch.status['serviceAccountId'] = sa_id
+            patch.status['credentialsSecretRef'] = {'name': secret_name, 'namespace': namespace}
+            logger.info(f"[Servicealt] Successfully processed '{name}'; credentials stored in secret '{secret_name}'.")
+        else:
+            # This case should ideally be caught earlier, but as a safeguard:
+            logger.error(f"[Servicealt] Processing for '{name}' reached end without a valid sa_id. Setting status to 'Failed'.")
+            patch.status['state'] = 'Failed'
+            patch.status['message'] = f'Operation failed for {name} due to missing service account ID before finalization.'
 
+
+    except kopf.TemporaryError: # Re-raise TemporaryError to allow Kopf to handle it
+        raise
     except Exception as e:
-        logger.error(f"[Servicealt] Error occurred during processing of '{name}': {str(e)}\n{traceback.format_exc()}")
+        logger.error(f"[Servicealt] Unhandled error occurred during processing of '{name}': {str(e)}\n{traceback.format_exc()}")
         if not isinstance(patch.status, dict):
              patch.status = {}
         patch.status['state'] = 'Failed'
         patch.status['message'] = f'Operation failed for {name}: {str(e)}'
         if isinstance(e, kopf.PermanentError):
             raise
-        raise kopf.TemporaryError(f"[Servicealt] Temporary error processing '{name}': {e}", delay=60)
+        # For other unhandled exceptions, use a standard temporary error delay
+        raise kopf.TemporaryError(f"[Servicealt] Unhandled temporary error processing '{name}': {e}", delay=60)
 
 @kopf.on.update('jones.com', 'v1', 'servicealts')
 def update_servicealt(spec, name, namespace, logger, patch, **kwargs):
@@ -218,7 +289,8 @@ def delete_servicealt(spec, name, namespace, logger, patch, **kwargs):
         raise kopf.TemporaryError(f"[Servicealt] Error during cleanup: {e}", delay=60)
 
 # Confluent helpers
-def get_confluent_credentials(namespace=NAMESPACE_ARGOCD):
+def get_confluent_credentials(namespace=NAMESPACE_ARGOCD): #JB
+    """Retrieve Confluent credentials from a Kubernetes secret."""
     try:
         logger.info(f"[Confluent] Loading credentials from namespace '{namespace}'")
         secret = v1.read_namespaced_secret(CONFLUENT_SECRET_NAME, namespace)
@@ -235,7 +307,8 @@ def get_confluent_credentials(namespace=NAMESPACE_ARGOCD):
     except Exception as e:
         raise RuntimeError(f"[Confluent] Error fetching credentials: {e}")
 
-def create_k8s_secret(namespace, secret_name, api_key, api_secret, service_account_id):
+def create_k8s_secret(namespace, secret_name, api_key, api_secret, service_account_id): #JB
+    """Create a Kubernetes secret with Confluent credentials."""
     secret_manifest = client.V1Secret(
         metadata=client.V1ObjectMeta(name=secret_name, namespace=namespace),
         string_data={
@@ -256,7 +329,8 @@ def create_k8s_secret(namespace, secret_name, api_key, api_secret, service_accou
             logger.error(f"[K8S] Failed to create/update secret '{secret_name}': {e}")
             raise
 
-def create_confluent_api_key(service_account_id, service_account_name, api_key, api_secret):
+def create_confluent_api_key(service_account_id, service_account_name, api_key, api_secret): #JB    
+    """Create a Confluent API key for a service account."""
     url = "https://api.confluent.cloud/iam/v2/api-keys"
     payload = {
         "spec": {
@@ -286,7 +360,8 @@ def create_confluent_api_key(service_account_id, service_account_name, api_key, 
     logger.info(f"[Confluent] API key created, ID: {api_key_id}, Secret: {api_key_secret}")
     return {"id": api_key_id, "secret": api_key_secret}
 
-def create_confluent_service_account(name, description, api_key, api_secret):
+def create_confluent_service_account(name, description, api_key, api_secret): #JB
+    """Create a Confluent service account."""
     url = "https://api.confluent.cloud/iam/v2/service-accounts"
     payload = {
         "display_name": name,
@@ -303,7 +378,8 @@ def create_confluent_service_account(name, description, api_key, api_secret):
     logger.info(f"[Confluent] Service account created: ID={data.get('id')} Name={data.get('display_name')}")
     return data
 
-def get_confluent_service_account_by_name(name, api_key, api_secret):
+def get_confluent_service_account_by_name(name, api_key, api_secret): #JB
+    """Retrieve a Confluent service account by name."""
     url = "https://api.confluent.cloud/iam/v2/service-accounts"
     params = {
         "display_name": name  # Search By Name
@@ -333,7 +409,8 @@ def get_confluent_service_account_by_name(name, api_key, api_secret):
         logger.error(f"[Confluent] Error retrieving service account: {e}")
         return None
 
-def get_confluent_api_keys_for_service_account(service_account_id, cluster_id, api_key, api_secret):
+def get_confluent_api_keys_for_service_account(service_account_id, cluster_id, api_key, api_secret): #JB
+    """Retrieve all API keys for a specific service account."""
     url = "https://api.confluent.cloud/iam/v2/api-keys"
     params = {
         "spec.owner": service_account_id,
@@ -352,7 +429,7 @@ def get_confluent_api_keys_for_service_account(service_account_id, cluster_id, a
         logger.exception("[Confluent] Unexpected error while retrieving API keys")
         raise
 
-def delete_confluent_api_keys_for_service_account(service_account_id, cluster_id, api_key, api_secret):
+def delete_confluent_api_keys_for_service_account(service_account_id, cluster_id, api_key, api_secret): #JB
     """Delete all API keys associated with a service account."""
     url = "https://api.confluent.cloud/iam/v2/api-keys"
     try:
@@ -368,7 +445,7 @@ def delete_confluent_api_keys_for_service_account(service_account_id, cluster_id
     except Exception as e:
         raise Exception(f"Failed to delete API keys: {str(e)}")
 
-def delete_confluent_service_account(service_account_id, api_key, api_secret):
+def delete_confluent_service_account(service_account_id, api_key, api_secret): #JB
     """Delete a Confluent service account."""
     url = f"https://api.confluent.cloud/iam/v2/service-accounts/{service_account_id}"
     try:
@@ -377,7 +454,7 @@ def delete_confluent_service_account(service_account_id, api_key, api_secret):
     except Exception as e:
         raise Exception(f"Failed to delete service account: {str(e)}")
 
-def delete_associated_resources(name, namespace):
+def delete_associated_resources(name, namespace): #JB 
     """Delete any associated Kubernetes resources."""
     
     # Delete configmaps
@@ -401,7 +478,7 @@ def delete_associated_resources(name, namespace):
 class TopicNotFoundException(Exception):
     pass
 
-def delete_confluent_topic(topic_name, api_key, api_secret):
+def delete_confluent_topic(topic_name, api_key, api_secret): #JB
     """Delete a topic from Confluent Cloud."""
     url = f"https://api.confluent.cloud/kafka/v3/clusters/{CLUSTER_ID}/topics/{topic_name}"
     try:
@@ -417,7 +494,9 @@ def delete_confluent_topic(topic_name, api_key, api_secret):
     except Exception as e:
         raise Exception(f"Error deleting topic: {str(e)}")
 
-def assign_role_binding(service_account_id, api_key, api_secret, role_name):
+
+#Rolebinding
+def assign_role_binding(service_account_id, api_key, api_secret, role_name): #JB
     """Assign a specific role to a service account in the cluster."""
     url = "https://api.confluent.cloud/iam/v2/role-bindings"
     crn_pattern = f"crn://confluent.cloud/organization={organization_id}/environment={env_id}/cloud-cluster={cluster_id}"
@@ -437,7 +516,7 @@ def assign_role_binding(service_account_id, api_key, api_secret, role_name):
         logger.error(f"[Confluent] Error assigning {role_name} role: {e}")
         raise
 
-def read_role_binding(role_binding_id, api_key, api_secret):
+def read_role_binding(role_binding_id, api_key, api_secret): #JB
     """Reads a specific role binding by ID."""
     url = f"https://api.confluent.cloud/iam/v2/role-bindings/{role_binding_id}"
     try:
@@ -453,7 +532,7 @@ def read_role_binding(role_binding_id, api_key, api_secret):
         logger.error(f"[Confluent] Error reading role binding: {e}")
         raise
 
-def list_role_bindings(organization_id, env_id, cluster_id, api_key, api_secret, principal=None, role_name=None, page_size=None, page_token=None):
+def list_role_bindings(organization_id, env_id, cluster_id, api_key, api_secret, principal=None, role_name=None, page_size=None, page_token=None): #JB
     """Lists role bindings for a specific cluster with optional filters."""
     url = "https://api.confluent.cloud/iam/v2/role-bindings"
     crn_pattern_value = f"crn://confluent.cloud/organization={organization_id}/environment={env_id}/cloud-cluster={cluster_id}"
@@ -483,7 +562,7 @@ def list_role_bindings(organization_id, env_id, cluster_id, api_key, api_secret,
         logger.error(f"[Confluent] Error listing role bindings: {e}")
         raise
 
-def delete_role_binding(role_binding_id, api_key, api_secret):
+def delete_role_binding(role_binding_id, api_key, api_secret): #JB
     """Deletes a specific role binding by ID."""
     url = f"https://api.confluent.cloud/iam/v2/role-bindings/{role_binding_id}"
     try:
@@ -502,3 +581,71 @@ def delete_role_binding(role_binding_id, api_key, api_secret):
     except Exception as e:
         logger.error(f"[Confluent] Error deleting role binding: {e}")
         raise
+
+
+#Topic
+def check_topic_exists(topic_name, api_key, api_secret, cluster_id, rest_endpoint, logger): #RO
+    """Check if a topic exists in Confluent Cloud."""
+    url = f"{rest_endpoint}/kafka/v3/clusters/{cluster_id}/topics/{topic_name}"
+    headers = {"Content-Type": "application/json"}
+    
+    try:
+        response = requests.get(url, auth=(api_key, api_secret), headers=headers)
+        if response.status_code == 200:
+            logger.info(f"[Confluent] Topic '{topic_name}' already exists")
+            return True
+        elif response.status_code == 404:
+            logger.info(f"[Confluent] Topic '{topic_name}' does not exist")
+            return False
+        else:
+            logger.error(f"[Confluent] Unexpected response checking topic: {response.status_code}")
+            return False
+    except Exception as e:
+        logger.error(f"[Confluent] Error checking topic existence: {e}")
+        return False
+
+def create_confluent_topic(name, partitions, config, api_key, api_secret, cluster_id, rest_endpoint, logger): #RO
+    """Create a topic in Confluent Cloud."""
+    url = f"{rest_endpoint}/kafka/v3/clusters/{cluster_id}/topics"
+    headers = {
+        "Content-Type": "application/json"
+    }
+
+    # Prepare topic configuration
+    topic_config = []
+    if "retentionMs" in config:
+        topic_config.append({"name": "retention.ms", "value": str(config["retentionMs"])})
+    if "cleanupPolicy" in config:
+        topic_config.append({"name": "cleanup.policy", "value": config["cleanupPolicy"]})
+
+    # Construct the payload for the topic creation request
+    payload = {
+        "topic_name": name,
+        "partitions_count": partitions,
+        "replication_factor": config.get("replicationFactor", 3),
+        "configs": topic_config
+    }
+
+    # Log the payload for debugging
+    logger.debug(f"[Confluent] Creating topic with payload: {json.dumps(payload)}")
+
+    response = None  # <-- This line prevents NameError if the request fails early
+    try:
+        # Make the POST request to create the topic
+        response = requests.post(url, json=payload, auth=(api_key, api_secret), headers=headers)
+
+        # Log the response status for debugging
+        logger.debug(f"[Confluent] Response Status: {response.status_code}")
+        logger.debug(f"[Confluent] Response Body: {response.text}")
+
+        # Raise an exception for unsuccessful response status
+        response.raise_for_status()
+
+        # Return the response JSON if the request was successful
+        return response.json()
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"[Confluent] Failed to create topic: {e}")
+        if response is not None:
+            logger.error(f"[Confluent] Error response: {response.text}")
+        raise  # Reraise the exception so retry logic can handle it
