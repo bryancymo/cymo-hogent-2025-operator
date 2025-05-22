@@ -16,6 +16,8 @@ CONFLUENT_SECRET_NAME = "confluent2-credentials"
 SECRET_TYPE_OPAQUE = "Opaque"
 CONFIG_LOADED = False
 cluster_id = "lkc-vv08z0"
+env_id = "env-jzm58p"
+organization_id = "0276e553-ed87-4924-83ec-0edb2f363c39"
 
 # Global variable for Kubernetes client
 v1 = None
@@ -43,7 +45,7 @@ def configure(settings: kopf.OperatorSettings, **_):
 
 # Servicealt
 @kopf.on.create('jones.com', 'v1', 'servicealts')
-def create_servicealt(spec, name, namespace, logger, meta, patch, status, **kwargs):
+def create_servicealt(spec, name, namespace, logger, meta, patch, **kwargs):
     # Check if the resource is being deleted
     if meta.get('deletionTimestamp'):
         logger.info(f"[Servicealt] Resource '{name}' is being deleted, skipping creation")
@@ -51,11 +53,6 @@ def create_servicealt(spec, name, namespace, logger, meta, patch, status, **kwar
 
     logger.info(f"[Servicealt] Created: '{name}' in namespace '{namespace}'")
     logger.info(f"ContextLink: {spec.get('contextLink')}, SecretSolution: {spec.get('secretSolution')}")
-
-    # Check if the resource is already processed and in Ready state
-    if status and status.get('state') == 'Ready':
-        logger.info(f"[Servicealt] Resource '{name}' is already in Ready state, skipping processing")
-        return
 
     retry = kwargs.get("retry", 0)
     if retry > 0:
@@ -65,10 +62,6 @@ def create_servicealt(spec, name, namespace, logger, meta, patch, status, **kwar
 
     sa_name = f"operator2-hogent-{name}"
     secret_name = f"confluent2-{sa_name}-credentials"
-
-    # Initialize patch.status if it doesn't exist
-    if not isinstance(patch.status, dict):
-        patch.status = {}
 
     # Initial status update
     patch.status['state'] = 'Processing'
@@ -123,14 +116,15 @@ def create_servicealt(spec, name, namespace, logger, meta, patch, status, **kwar
             patch.status['message'] = f"Using existing Confluent API key and Kubernetes secret for '{name}'."
             patch.status['serviceAccountId'] = sa_id
             patch.status['credentialsSecretRef'] = {'name': secret_name, 'namespace': namespace}
-            logger.info(f"[Servicealt] Using existing resources for '{name}'")
-            return
 
         if not existing_keys:
             api_key_data = create_confluent_api_key(sa_id, sa_name, mgmt_api_key, mgmt_api_secret)
             api_key_value = api_key_data['id']
             api_secret_value = api_key_data['secret']
             logger.info(f"[Confluent] New API key created for service account {sa_id}")
+
+            # Assign operator role to the service account
+            assign_operator_role_to_service_account(sa_id, cluster_id, mgmt_api_key, mgmt_api_secret)
 
             try:
                 create_k8s_secret(namespace, secret_name, api_key_value, api_secret_value, sa_id)
@@ -139,7 +133,6 @@ def create_servicealt(spec, name, namespace, logger, meta, patch, status, **kwar
                 logger.error(f"[K8S] Failed to create/update secret '{secret_name}': {e}")
                 raise kopf.TemporaryError(f"[K8S] Temporary error creating/updating secret '{secret_name}': {e}", delay=60)
 
-        # Final status update
         patch.status['state'] = 'Ready'
         patch.status['message'] = 'Confluent Service Account and API Key provisioned; credentials stored in secret.'
         patch.status['serviceAccountId'] = sa_id
@@ -148,21 +141,20 @@ def create_servicealt(spec, name, namespace, logger, meta, patch, status, **kwar
 
     except Exception as e:
         logger.error(f"[Servicealt] Error occurred during processing of '{name}': {str(e)}\n{traceback.format_exc()}")
+        if not isinstance(patch.status, dict):
+             patch.status = {}
         patch.status['state'] = 'Failed'
         patch.status['message'] = f'Operation failed for {name}: {str(e)}'
         if isinstance(e, kopf.PermanentError):
             raise
         raise kopf.TemporaryError(f"[Servicealt] Temporary error processing '{name}': {e}", delay=60)
 
-
 @kopf.on.update('jones.com', 'v1', 'servicealts')
 def update_servicealt(spec, name, namespace, logger, patch, **kwargs):
     logger.info(f"[Servicealt] Updated: '{name}' in namespace '{namespace}'")
     logger.info(f"ContextLink: {spec.get('contextLink')}, SecretSolution: {spec.get('secretSolution')}")
-    # Update the status to indicate the service has been updated
     patch.status['state'] = 'Updated'
-    patch.status['message'] = f"Servicealt '{name}' has been successfully updated."
-
+    patch.status['message'] = f"Service '{name}' updated with new context and secret solution."
 
 @kopf.on.delete('jones.com', 'v1', 'servicealts')
 def delete_servicealt(spec, name, namespace, logger, patch, **kwargs):
@@ -419,3 +411,23 @@ def delete_confluent_topic(topic_name, api_key, api_secret):
         raise Exception(f"Failed to delete topic: {e.response.text}")
     except Exception as e:
         raise Exception(f"Error deleting topic: {str(e)}")
+
+def assign_operator_role_to_service_account(service_account_id, cluster_id, api_key, api_secret):
+    """Assign the operator role to a service account in the cluster."""
+    url = "https://api.confluent.cloud/iam/v2/role-bindings"
+    crn_pattern = f"crn://confluent.cloud/organization={organization_id}/environment={env_id}/cloud-cluster={cluster_id}"
+    payload = {
+        "principal": f"User:{service_account_id}",
+        "role_name": "Operator",  # Change this to the appropriate role name if needed
+        "crn_pattern": crn_pattern
+    }
+    try:
+        response = requests.post(url, json=payload, auth=(api_key, api_secret))
+        response.raise_for_status()
+        logger.info(f"[Confluent] Operator role assigned to service account ID: {service_account_id}")
+    except requests.HTTPError as e:
+        logger.error(f"[Confluent] Failed to assign operator role: {e.response.text}")
+        raise
+    except Exception as e:
+        logger.error(f"[Confluent] Error assigning operator role: {e}")
+        raise
