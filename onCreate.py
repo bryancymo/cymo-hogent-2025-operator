@@ -56,7 +56,8 @@ def create_servicealt(spec, name, namespace, logger, meta, patch, **kwargs):
 
     retry = kwargs.get("retry", 0)
     if retry > 0:
-        delay = min(2 ** retry + random.uniform(0, 5), 120)
+        capped_retry = min(retry, 30)
+        delay = min(2 ** capped_retry + random.uniform(0, 5), 120)
         logger.warning(f"[Servicealt] Retry #{retry} - delaying for {delay:.2f} seconds.")
         raise kopf.TemporaryError(f"[Servicealt] Temporary error: Retry #{retry}", delay=delay)
 
@@ -109,6 +110,13 @@ def create_servicealt(spec, name, namespace, logger, meta, patch, **kwargs):
                 else:
                     raise
 
+        if sa_id: # Ensure we have an SA ID before attempting role assignment
+             assign_role_binding(sa_id, mgmt_api_key, mgmt_api_secret, "Operator")
+             logger.info(f"[Confluent] Operator role assigned/re-assigned using dynamic function to service account ID: {sa_id}")
+        else:
+             logger.error(f"[Servicealt] Cannot assign role, service account ID is not available for '{name}'")
+
+
         existing_keys = get_confluent_api_keys_for_service_account(sa_id, cluster_id, mgmt_api_key, mgmt_api_secret)
 
         if existing_keys and secret_exists:
@@ -122,10 +130,7 @@ def create_servicealt(spec, name, namespace, logger, meta, patch, **kwargs):
             api_key_value = api_key_data['id']
             api_secret_value = api_key_data['secret']
             logger.info(f"[Confluent] New API key created for service account {sa_id}")
-
-            # Assign operator role to the service account
-            assign_operator_role_to_service_account(sa_id, cluster_id, mgmt_api_key, mgmt_api_secret)
-
+            
             try:
                 create_k8s_secret(namespace, secret_name, api_key_value, api_secret_value, sa_id)
                 logger.info(f"[K8S] Secret '{secret_name}' created/updated in namespace '{namespace}'")
@@ -412,22 +417,88 @@ def delete_confluent_topic(topic_name, api_key, api_secret):
     except Exception as e:
         raise Exception(f"Error deleting topic: {str(e)}")
 
-def assign_operator_role_to_service_account(service_account_id, cluster_id, api_key, api_secret):
-    """Assign the operator role to a service account in the cluster."""
+def assign_role_binding(service_account_id, api_key, api_secret, role_name):
+    """Assign a specific role to a service account in the cluster."""
     url = "https://api.confluent.cloud/iam/v2/role-bindings"
     crn_pattern = f"crn://confluent.cloud/organization={organization_id}/environment={env_id}/cloud-cluster={cluster_id}"
     payload = {
         "principal": f"User:{service_account_id}",
-        "role_name": "Operator",  # Change this to the appropriate role name if needed
+        "role_name": role_name,
         "crn_pattern": crn_pattern
     }
     try:
         response = requests.post(url, json=payload, auth=(api_key, api_secret))
         response.raise_for_status()
-        logger.info(f"[Confluent] Operator role assigned to service account ID: {service_account_id}")
+        logger.info(f"[Confluent] {role_name} role assigned to service account ID: {service_account_id}")
     except requests.HTTPError as e:
-        logger.error(f"[Confluent] Failed to assign operator role: {e.response.text}")
+        logger.error(f"[Confluent] Failed to assign {role_name} role: {e.response.text}")
         raise
     except Exception as e:
-        logger.error(f"[Confluent] Error assigning operator role: {e}")
+        logger.error(f"[Confluent] Error assigning {role_name} role: {e}")
+        raise
+
+def read_role_binding(role_binding_id, api_key, api_secret):
+    """Reads a specific role binding by ID."""
+    url = f"https://api.confluent.cloud/iam/v2/role-bindings/{role_binding_id}"
+    try:
+        logger.info(f"[Confluent] Attempting to read role binding with ID: {role_binding_id}")
+        response = requests.get(url, auth=(api_key, api_secret))
+        response.raise_for_status()
+        logger.info(f"[Confluent] Successfully read role binding with ID: {role_binding_id}")
+        return response.json() # Return the role binding details
+    except requests.HTTPError as e:
+        logger.error(f"[Confluent] Failed to read role binding (HTTP error {e.response.status_code}): {e.response.text}")
+        raise
+    except Exception as e:
+        logger.error(f"[Confluent] Error reading role binding: {e}")
+        raise
+
+def list_role_bindings(organization_id, env_id, cluster_id, api_key, api_secret, principal=None, role_name=None, page_size=None, page_token=None):
+    """Lists role bindings for a specific cluster with optional filters."""
+    url = "https://api.confluent.cloud/iam/v2/role-bindings"
+    crn_pattern_value = f"crn://confluent.cloud/organization={organization_id}/environment={env_id}/cloud-cluster={cluster_id}"
+    params = {
+        "crn_pattern": crn_pattern_value
+    }
+
+    if principal:
+        params["principal"] = principal
+    if role_name:
+        params["role_name"] = role_name
+    if page_size is not None: # Check for None specifically to allow 0 or other integer values if applicable
+        params["page_size"] = page_size
+    if page_token:
+        params["page_token"] = page_token
+
+    try:
+        logger.info(f"[Confluent] Attempting to list role bindings with parameters: {params}")
+        response = requests.get(url, params=params, auth=(api_key, api_secret))
+        response.raise_for_status()
+        logger.info(f"[Confluent] Successfully listed role bindings.")
+        return response.json()
+    except requests.HTTPError as e:
+        logger.error(f"[Confluent] Failed to list role bindings (HTTP error {e.response.status_code}): {e.response.text}")
+        raise
+    except Exception as e:
+        logger.error(f"[Confluent] Error listing role bindings: {e}")
+        raise
+
+def delete_role_binding(role_binding_id, api_key, api_secret):
+    """Deletes a specific role binding by ID."""
+    url = f"https://api.confluent.cloud/iam/v2/role-bindings/{role_binding_id}"
+    try:
+        logger.info(f"[Confluent] Attempting to delete role binding with ID: {role_binding_id}")
+        response = requests.delete(url, auth=(api_key, api_secret))
+        response.raise_for_status()
+        logger.info(f"[Confluent] Successfully deleted role binding with ID: {role_binding_id}")
+        if response.status_code == 200:
+            return True
+        else:
+            return f"Deletion response status: {response.status_code}"
+
+    except requests.HTTPError as e:
+        logger.error(f"[Confluent] Failed to delete role binding (HTTP error {e.response.status_code}): {e.response.text}")
+        raise
+    except Exception as e:
+        logger.error(f"[Confluent] Error deleting role binding: {e}")
         raise

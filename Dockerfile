@@ -9,8 +9,8 @@ WORKDIR /app
 
 # Copy your operator code into the image
 # Dit moet je nieet heel de tijd pushen AUB
-COPY empty_copy.py .
+COPY onCreate.py .
 
 # Run the operator
-CMD ["kopf", "run", "--standalone", "empty_copy.py"]
+CMD ["kopf", "run", "--standalone", "onCreate.py"]
 
