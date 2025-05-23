@@ -18,6 +18,7 @@ CONFIG_LOADED = False
 cluster_id = "lkc-vv08z0"
 env_id = "env-jzm58p"
 organization_id = "0276e553-ed87-4924-83ec-0edb2f363c39"
+rest_endpoint = "https://pkc-619z3.us-east1.gcp.confluent.cloud"
 
 # Global variable for Kubernetes client
 v1 = None
@@ -54,12 +55,10 @@ def create_applicationtopic(spec, name, namespace, status, **kwargs):
     partitions = spec.get("partitions", 1)
     config = spec.get("config", {})
 
-    rest_endpoint = "https://pkc-619z3.us-east1.gcp.confluent.cloud:443"  # <- YOUR REST endpoint
-
     def run():
         try:
-            # Retrieve API keys from the secret created by servicealt
-            secret_name = f"confluent2-operator2-hogent-{name}-credentials"
+            service_name = name.replace('-applicationtopic', '')            
+            secret_name = f"confluent2-operator2-hogent-{service_name}-credentials"
             api_key, api_secret = get_confluent_credentials(secret_name, namespace=namespace)
             logger.info(f"[Confluent] Retrieved credentials for topic '{topic_name}'")
             
@@ -73,11 +72,14 @@ def create_applicationtopic(spec, name, namespace, status, **kwargs):
             return {'status': {'create_applicationtopic': {'message': f"Topic '{topic_name}' created successfully."}}}
         except Exception as e:
             logger.error(f"[Confluent] Error creating topic '{topic_name}': {e}")
-            raise
+            # Raise a TemporaryError to trigger retry
+            raise kopf.TemporaryError(f"Failed to create topic: {str(e)}", delay=30)
 
     try:
-        result = retry_with_backoff(run, retry, logger, error_msg="Failed to create Kafka topic")
+        result = run()
         return result
+    except kopf.TemporaryError:
+        raise
     except Exception as e:
         return {'status': {'create_applicationtopic': {'message': f"Failed to create topic: {str(e)}"}}}
 
@@ -167,9 +169,12 @@ def create_servicealt(spec, name, namespace, logger, meta, patch, **kwargs):
                     raise
 
         if sa_id:
-            logger.info(f"[Servicealt] Assigning 'Operator' role to Confluent SA ID '{sa_id}' for '{name}'.")
-            assign_role_binding(sa_id, mgmt_api_key, mgmt_api_secret, "Operator")
-            logger.info(f"[Confluent] Operator role assigned/re-assigned to service account ID: {sa_id} for '{name}'.")
+            logger.info(f"[Servicealt] Assigning 'CloudClusterAdmin' role to Confluent SA ID '{sa_id}' for '{name}'.")
+            assign_role_binding(sa_id, mgmt_api_key, mgmt_api_secret, "CloudClusterAdmin")
+            logger.info(f"[Confluent] CloudClusterAdmin role assigned/re-assigned to service account ID: {sa_id} for '{name}'.")
+            # Add delay to allow role propagation
+            logger.info(f"[Servicealt] Waiting 30 seconds for role propagation...")
+            time.sleep(30)
         else:
             logger.error(f"[Servicealt] Cannot assign role for '{name}', Confluent service account ID is not available.")
 
@@ -683,7 +688,7 @@ def create_confluent_topic(name, partitions, config, api_key, api_secret, cluste
     # Log the payload for debugging
     logger.debug(f"[Confluent] Creating topic with payload: {json.dumps(payload)}")
 
-    response = None  # <-- This line prevents NameError if the request fails early
+    response = None
     try:
         # Make the POST request to create the topic
         response = requests.post(url, json=payload, auth=(api_key, api_secret), headers=headers)
@@ -703,3 +708,28 @@ def create_confluent_topic(name, partitions, config, api_key, api_secret, cluste
         if response is not None:
             logger.error(f"[Confluent] Error response: {response.text}")
         raise  # Reraise the exception so retry logic can handle it
+def retry_with_backoff(func, retry_count, logger, error_msg="Operation failed"):
+    """
+    Retry a function with exponential backoff.
+    
+    Args:
+        func: The function to retry
+        retry_count: Current retry attempt
+        logger: Logger instance
+        error_msg: Message to log on failure
+        
+    Returns:
+        The result of the function call if successful
+    """
+    max_retries = 5
+    if retry_count >= max_retries:
+        logger.error(f"{error_msg} after {max_retries} attempts")
+        raise Exception(f"{error_msg} after {max_retries} attempts")
+
+    try:
+        return func()
+    except Exception as e:
+        logger.warning(f"Attempt {retry_count + 1} failed: {str(e)}")
+        delay = min(30 * (2 ** retry_count), 300)  # Exponential backoff with max 300 seconds
+        logger.info(f"Retrying in {delay} seconds...")
+        raise kopf.TemporaryError(f"Retry {retry_count + 1}/{max_retries}: {str(e)}", delay=delay)
