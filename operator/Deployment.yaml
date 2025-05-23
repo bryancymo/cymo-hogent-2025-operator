@@ -6,7 +6,7 @@ metadata:
   labels:
     app: kafka-topic-operator
 spec:
-  replicas: 0
+  replicas: 1
   selector:
     matchLabels:
       app: kafka-topic-operator
@@ -51,7 +51,7 @@ spec:
       serviceAccountName: intern-gke-cluster
       containers:
         - name: operator-v2
-          image: eu.gcr.io/cymo-hogent-2025-operator/kopf-operator:mergev1.1
+          image: eu.gcr.io/cymo-hogent-2025-operator/kopf-operator:mergev1.2
           imagePullPolicy: Always
           env:
             - name: CONFLUENT_BOOTSTRAP_SERVERS
