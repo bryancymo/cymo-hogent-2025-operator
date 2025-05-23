@@ -54,11 +54,13 @@ def create_applicationtopic(spec, name, namespace, status, **kwargs):
     partitions = spec.get("partitions", 1)
     config = spec.get("config", {})
 
-    rest_endpoint = "https://pkc-z1o60.europe-west1.gcp.confluent.cloud:443"  # <- YOUR REST endpoint
+    rest_endpoint = "https://pkc-619z3.us-east1.gcp.confluent.cloud:443"  # <- YOUR REST endpoint
 
     def run():
         try:
-            api_key, api_secret = get_topic_credentials(logger, namespace='argocd')
+            # Retrieve API keys from the secret created by servicealt
+            secret_name = f"confluent2-operator2-hogent-{name}-credentials"
+            api_key, api_secret = get_confluent_credentials(secret_name, namespace=namespace)
             logger.info(f"[Confluent] Retrieved credentials for topic '{topic_name}'")
             
             # Check if topic already exists
@@ -309,11 +311,11 @@ def create_application_topic_for_service(name, namespace, logger):
             "apiVersion": "jones.com/v1",
             "kind": "ApplicationTopic",
             "metadata": {
-                "name": f"{name}-topic",
+                "name": f"{name}-applicationtopic",
                 "namespace": namespace
             },
             "spec": {
-                "name": f"{name}-topic",
+                "name": f"{name}-applicationtopic",
                 "partitions": 1,
                 "config": {
                     "retentionMs": 604800000,  # 7 days in milliseconds
