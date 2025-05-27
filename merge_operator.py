@@ -23,8 +23,8 @@ rest_endpoint = "https://pkc-619z3.us-east1.gcp.confluent.cloud"
 # Global variable for Kubernetes client
 v1 = None
 
-# Increase logging level to DEBUG
-# Options include: logging.DEBUG, logging.INFO, logging.WARNING, logging.ERROR, logging.CRITICAL
+
+# Logging Level: logging.DEBUG, logging.INFO, logging.WARNING, logging.ERROR, logging.CRITICAL
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
@@ -83,8 +83,46 @@ def create_applicationtopic(spec, name, namespace, status, **kwargs):
     except Exception as e:
         return {'status': {'create_applicationtopic': {'message': f"Failed to create topic: {str(e)}"}}}
 
-# Servicealt
 
+#DomainTopic
+@kopf.on.create('jones.com', 'v1', 'domaintopics')
+def create_domaintopic(spec, name, namespace, status, **kwargs):
+    logger.info(f"[domainTopic] Created: '{name}' in namespace '{namespace}'")
+    retry = kwargs.get("retry", 0)
+
+    topic_name = spec.get("name", name)
+    partitions = spec.get("partitions", 1)
+    config = spec.get("config", {})
+
+    def run():
+        try:
+            service_name = name.replace('-domaintopic', '')            
+            secret_name = f"confluent2-operator2-hogent-{service_name}-credentials"
+            api_key, api_secret = get_confluent_credentials(secret_name, namespace=namespace)
+            logger.info(f"[Confluent] Retrieved credentials for topic '{topic_name}'")
+            
+            # Check if topic already exists
+            if check_topic_exists(topic_name, api_key, api_secret, cluster_id, rest_endpoint, logger):
+                logger.info(f"[Confluent] Topic '{topic_name}' already exists, skipping creation")
+                return {'status': {'create_domaintopic': {'message': f"Topic '{topic_name}' already exists."}}}
+            
+            create_confluent_topic(topic_name, partitions, config, api_key, api_secret, cluster_id, rest_endpoint, logger)
+            logger.info(f"[Confluent] Kafka topic '{topic_name}' created successfully")
+            return {'status': {'create_domaintopic': {'message': f"Topic '{topic_name}' created successfully."}}}
+        except Exception as e:
+            logger.error(f"[Confluent] Error creating topic '{topic_name}': {e}")
+            # Raise a TemporaryError to trigger retry
+            raise kopf.TemporaryError(f"Failed to create topic: {str(e)}", delay=30)
+
+    try:
+        result = run()
+        return result
+    except kopf.TemporaryError:
+        raise
+    except Exception as e:
+        return {'status': {'create_domaintopic': {'message': f"Failed to create topic: {str(e)}"}}}
+
+# Servicealt
 @kopf.on.create('jones.com', 'v1', 'servicealts')
 def create_servicealt(spec, name, namespace, logger, meta, patch, **kwargs):
     # Check if the resource is being deleted
@@ -205,6 +243,7 @@ def create_servicealt(spec, name, namespace, logger, meta, patch, **kwargs):
         # Create ApplicationTopic after service account is ready
         if sa_id:
             create_application_topic_for_service(name, namespace, logger)
+            create_domain_topic_for_service(name, namespace, logger)
 
         # Final status update
         if sa_id:
@@ -344,6 +383,55 @@ def create_application_topic_for_service(name, namespace, logger):
         return True
     except Exception as e:
         logger.error(f"[Servicealt] Failed to create ApplicationTopic for '{name}': {e}")
+        return False
+
+def create_domain_topic_for_service(name, namespace, logger):
+    """
+    Creates an domainTopic for a given service.
+    
+    Args:
+        name (str): The name of the service
+        namespace (str): The Kubernetes namespace
+        logger: Logger instance for logging
+        
+    Returns:
+        bool: True if creation was successful, False otherwise
+    """
+    logger.info(f"[Servicealt] Creating domainTopic for '{name}'.")
+    try:
+        # Create domainTopic manifest
+        domain_topic = {
+            "apiVersion": "jones.com/v1",
+            "kind": "Domaintopic",
+            "metadata": {
+                "name": f"{name}-domaintopic",
+                "namespace": namespace
+            },
+            "spec": {
+                "name": f"{name}-domaintopic",
+                "partitions": 1,
+                "config": {
+                    "retentionMs": 604800000,  # 7 days in milliseconds
+                    "cleanupPolicy": "delete",
+                    "replicationFactor": 3
+                },
+                "consumers": []
+            }
+        }
+
+        # Create the domainTopic using the Kubernetes API
+        custom_api = client.CustomObjectsApi()
+        custom_api.create_namespaced_custom_object(
+            group="jones.com",
+            version="v1",
+            namespace=namespace,
+            plural="domaintopics",
+            body=domain_topic
+        )
+        logger.info(f"[Servicealt] Successfully created DomainTopic '{name}-topic' for '{name}'.")
+        return True
+    except Exception as e:
+        logger.error(f"[Servicealt] Failed to create DomainTopic for '{name}': {e}")
         return False
 
 # Confluent helpers
