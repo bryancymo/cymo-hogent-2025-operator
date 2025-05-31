@@ -3,3 +3,4 @@ kubernetes
 confluent-kafka
 base64
 requests
+google-cloud-secret-manager
