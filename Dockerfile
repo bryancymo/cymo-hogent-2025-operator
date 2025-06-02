@@ -9,8 +9,8 @@ WORKDIR /app
 
 # Copy your operator code into the image
 # Dit moet je nieet heel de tijd pushen AUB
-COPY merge_operator.py .
+COPY mainOperator.py .
 
 # Run the operator
-CMD ["kopf", "run", "--standalone", "merge_operator.py"]
+CMD ["kopf", "run", "--standalone", "mainOperator.py"]
 
