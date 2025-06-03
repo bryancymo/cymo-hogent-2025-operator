@@ -1,0 +1,20 @@
+apiVersion: jones.com/v1
+kind: Servicealt
+metadata:
+  name: bol-packing-service
+  namespace: argocd
+spec:
+  name: bol-packing-service
+  contextLink: order-context
+  secretSolution: bol-packing-secret
+---
+apiVersion: jones.com/v1
+kind: Servicealt
+metadata:
+  name: bol-delivery-service
+  namespace: argocd
+spec:
+  name: bol-delivery-service
+  contextLink: order-context
+  secretSolution: bol-packing-secret
+
